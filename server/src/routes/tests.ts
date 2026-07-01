@@ -1,8 +1,37 @@
 import { Router } from "express";
 import { sql, nowText } from "../lib/db.js";
-import { computeQuestionState } from "../lib/review.js";
+import { computeQuestionState, type Bucket } from "../lib/review.js";
+import { generateMilestoneExam, milestoneTopics, nextMilestoneBucket, toLocalDateString } from "../lib/milestoneExam.js";
 
 export const testsRouter = Router();
+
+const VALID_BUCKETS: Bucket[] = ["5", "10", "15", "20", "monthly-test"];
+
+// GET /api/tests/milestone/next -> which milestone is coming up, its due date, and what topics it'll cover
+testsRouter.get("/milestone/next", async (_req, res) => {
+  const bucket = nextMilestoneBucket();
+  const { resolvedDate, topics, poolMap, usedFallback } = await milestoneTopics(bucket);
+  res.json({
+    bucket,
+    dueDate: toLocalDateString(resolvedDate),
+    topics,
+    poolSize: poolMap.size,
+    usedFallback,
+  });
+});
+
+// POST /api/tests/milestone/generate { bucket } -> builds and returns a Milestone Exam test session
+testsRouter.post("/milestone/generate", async (req, res) => {
+  const bucket = req.body.bucket as Bucket;
+  if (!VALID_BUCKETS.includes(bucket)) return res.status(400).json({ error: "Invalid milestone bucket" });
+
+  try {
+    const result = await generateMilestoneExam(bucket);
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];

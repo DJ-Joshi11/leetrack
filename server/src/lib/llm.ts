@@ -113,6 +113,22 @@ ${JSON.stringify(snapshot, null, 2)}`;
   };
 }
 
+export async function generateSimilarQuestionNumbers(params: {
+  topics: string[];
+  count: number;
+  excludeNumbers: number[];
+}): Promise<number[]> {
+  const prompt = `You are building a practice exam for a student. Given these topics they've been practicing: ${params.topics.join(", ")}.
+
+Suggest ${params.count} real LeetCode question numbers that cover these same topics closely — don't drift into unrelated topics. Skew toward Medium difficulty (most of the list should be Medium, a few Easy, at most one or two Hard). Do not include any of these numbers, they're already used: ${params.excludeNumbers.join(", ") || "none"}.
+
+Respond with ONLY a JSON object (no prose) with key "numbers": an array of ${params.count} integers.`;
+
+  const text = await chatCompletion({ prompt, jsonMode: true });
+  const parsed = extractJson(text);
+  return Array.isArray(parsed.numbers) ? parsed.numbers.filter((n: unknown) => Number.isInteger(n)) : [];
+}
+
 export async function generateInsights(statsSnapshot: unknown): Promise<string> {
   const prompt = `You are a coding interview coach. Based on this JSON summary of a student's LeetCode practice history (topics covered, accuracy/confidence by topic and difficulty, attempt counts, recent test results), write a concise, high-level insights report in markdown with these four "####" sections in order: "Strengths", "Weak Topics", "Suggested Next Topics", "Overall Trend". Do not include a top-level title before the first section. Be specific and reference actual topic names and numbers from the data. Keep it under 300 words.
 
