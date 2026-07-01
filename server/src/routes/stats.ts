@@ -89,20 +89,22 @@ statsRouter.get("/tracker", async (_req, res) => {
   const today = localTodayIso();
   const yearMonth = localYearMonth();
 
-  let todayTotal = 0;
-  let todayNew = 0;
-  let monthTotal = 0;
-  let monthNew = 0;
+  const todayCounts = { total: 0, new: 0, revised: 0, backlog: 0 };
+  const monthCounts = { total: 0, new: 0, revised: 0, backlog: 0 };
 
   for (const a of attempts) {
     const isFirst = firstAttemptDate.get(a.question_id) === a.date;
+    // Auto-synced attempts reflect real-time LeetCode activity, so they drive "new"/"revised".
+    // Manually-logged attempts (Log page, bulk import) are backlog catch-up, not session activity.
+    const bucket: "new" | "revised" | "backlog" = a.source !== "auto" ? "backlog" : isFirst ? "new" : "revised";
+
     if (a.date === today) {
-      todayTotal++;
-      if (isFirst) todayNew++;
+      todayCounts.total++;
+      todayCounts[bucket]++;
     }
     if (a.date.startsWith(yearMonth)) {
-      monthTotal++;
-      if (isFirst) monthNew++;
+      monthCounts.total++;
+      monthCounts[bucket]++;
     }
   }
 
@@ -115,8 +117,8 @@ statsRouter.get("/tracker", async (_req, res) => {
   }
 
   res.json({
-    today: { total: todayTotal, new: todayNew, revised: todayTotal - todayNew },
-    thisMonth: { total: monthTotal, new: monthNew, revised: monthTotal - monthNew },
+    today: todayCounts,
+    thisMonth: monthCounts,
     byCheckpoint,
   });
 });

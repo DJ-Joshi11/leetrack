@@ -10,6 +10,7 @@ import { insightsRouter } from "./routes/insights.js";
 import { settingsRouter } from "./routes/settings.js";
 import { leetcodeRouter } from "./routes/leetcode.js";
 import { analysisRouter } from "./routes/analysis.js";
+import { syncRecentSubmissions } from "./lib/sync.js";
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,12 @@ const port = Number(process.env.PORT ?? 4000);
 initSchema()
   .then(() => {
     app.listen(port, () => console.log(`leetrack server listening on http://localhost:${port}`));
+
+    // Best-effort background sync while the process stays warm — the throttle inside
+    // syncRecentSubmissions means this is harmless to call frequently.
+    setInterval(() => {
+      syncRecentSubmissions().catch((err) => console.warn("Background LeetCode sync failed:", err.message));
+    }, 15 * 60 * 1000);
   })
   .catch((err) => {
     console.error("Failed to initialize database schema:", err);

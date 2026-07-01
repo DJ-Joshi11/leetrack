@@ -38,9 +38,11 @@ export async function initSchema() {
       code TEXT,
       ai_code_analysis TEXT,
       time_taken_sec INTEGER,
+      source TEXT NOT NULL DEFAULT 'manual',
       created_at TEXT NOT NULL DEFAULT ${sql.unsafe(NOW_TEXT)}
     )
   `;
+  await sql`ALTER TABLE attempts ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS test_sessions (

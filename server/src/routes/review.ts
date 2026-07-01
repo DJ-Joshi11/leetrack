@@ -48,3 +48,34 @@ reviewRouter.get("/due", async (_req, res) => {
 
   res.json({ buckets, overdueCount, dueTotal: Object.values(buckets).reduce((s, arr) => s + arr.length, 0) });
 });
+
+// GET /api/review/schedule -> every tracked question's current checkpoint + next due date (for the monthly timeline)
+reviewRouter.get("/schedule", async (_req, res) => {
+  const { questions, byQuestion } = await loadQuestionsWithAttempts();
+  const now = new Date();
+
+  const items = [];
+  for (const q of questions) {
+    const attempts = byQuestion.get(q.id) ?? [];
+    if (!attempts.length) continue;
+    const state = computeQuestionState(
+      attempts.map((a) => ({ date: a.date, confidence: a.confidence })),
+      now
+    );
+    items.push({
+      id: q.id,
+      number: q.number,
+      title: q.title,
+      difficulty: q.difficulty,
+      topics: JSON.parse(q.topics ?? "[]"),
+      stage: state.stage,
+      bucket: state.bucket,
+      lastAttemptDate: state.lastAttemptDate,
+      nextDue: state.nextDue,
+      isDue: state.isDue,
+      daysOverdue: state.daysOverdue,
+    });
+  }
+
+  res.json({ items });
+});

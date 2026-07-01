@@ -1,37 +1,10 @@
 import { Router } from "express";
-import { sql, nowText } from "../lib/db.js";
-import { lookupQuestionByNumber } from "../lib/leetcode.js";
-import { analyzeProblem, analyzeCode } from "../lib/llm.js";
+import { sql } from "../lib/db.js";
+import { analyzeCode } from "../lib/llm.js";
 import { computeQuestionState } from "../lib/review.js";
+import { fetchAndEnrich, insertQuestion, todayIso } from "../lib/enrichment.js";
 
 export const questionsRouter = Router();
-
-function todayIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-async function fetchAndEnrich(number: number) {
-  const detail = await lookupQuestionByNumber(number);
-  let ai = { optimalTimeComplexity: "Unknown", optimalSpaceComplexity: "Unknown", patternSummary: "" };
-  try {
-    ai = await analyzeProblem(detail);
-  } catch (err) {
-    console.warn(`LLM analyzeProblem failed for #${number}:`, (err as Error).message);
-  }
-  return { detail, ai };
-}
-
-async function insertQuestion(detail: Awaited<ReturnType<typeof lookupQuestionByNumber>>, ai: { optimalTimeComplexity: string; optimalSpaceComplexity: string; patternSummary: string }) {
-  const [row] = await sql`
-    INSERT INTO questions
-      (number, title, slug, difficulty, topics, leetcode_url, optimal_time_complexity, optimal_space_complexity, ai_pattern_summary, fetched_at)
-    VALUES
-      (${detail.number}, ${detail.title}, ${detail.slug}, ${detail.difficulty}, ${JSON.stringify(detail.topics)}, ${detail.url}, ${ai.optimalTimeComplexity}, ${ai.optimalSpaceComplexity}, ${ai.patternSummary}, ${nowText()})
-    RETURNING *
-  `;
-  return row;
-}
 
 function rowToQuestion(row: any) {
   return {

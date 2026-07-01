@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { fetchUserProfile } from "../lib/leetcode.js";
+import { syncRecentSubmissions } from "../lib/sync.js";
 
 export const leetcodeRouter = Router();
 
@@ -11,6 +12,16 @@ leetcodeRouter.get("/profile", async (req, res) => {
   try {
     const profile = await fetchUserProfile(username);
     res.json({ profile });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/leetcode/sync -> auto-log any new accepted submissions since the last sync (throttled to once/5min)
+leetcodeRouter.post("/sync", async (_req, res) => {
+  try {
+    const result = await syncRecentSubmissions();
+    res.json(result);
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
   }
