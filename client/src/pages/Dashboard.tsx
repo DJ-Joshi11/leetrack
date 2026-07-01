@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
-import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock, RefreshCw } from 'lucide-react'
+import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock, RefreshCw, Award } from 'lucide-react'
 import {
   api,
   type DueResponse,
@@ -12,9 +12,88 @@ import {
   type ActivityDay,
   type ActivityTracker,
   type SyncResult,
+  type MilestoneNext,
+  type MilestoneBucket,
+  type TestSession,
 } from '../lib/api'
-import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile } from '../components/ui'
+import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile, TopicTag } from '../components/ui'
 import { Heatmap } from '../components/Heatmap'
+
+const MILESTONE_EXAM_LABEL: Record<MilestoneBucket, string> = {
+  '5': '5th of the month',
+  '10': '10th of the month',
+  '15': '15th of the month',
+  '20': '20th of the month',
+  'monthly-test': 'Monthly Milestone Exam',
+}
+
+function MilestoneExamCard() {
+  const navigate = useNavigate()
+  const next = useQuery({
+    queryKey: ['tests', 'milestone', 'next'],
+    queryFn: () => api.get<MilestoneNext>('/tests/milestone/next'),
+  })
+
+  const generate = useMutation({
+    mutationFn: (bucket: MilestoneBucket) => api.post<{ session: TestSession }>('/tests/milestone/generate', { bucket }),
+    onSuccess: (data) => navigate(`/test/${data.session.id}`),
+  })
+
+  if (next.isLoading || !next.data) {
+    return (
+      <Card className="border-(--color-gold)/25">
+        <div className="flex items-center gap-2 text-sm text-(--color-text-dim)">
+          <Spinner /> Loading next milestone exam…
+        </div>
+      </Card>
+    )
+  }
+
+  const dueDate = new Date(`${next.data.dueDate}T00:00:00`)
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const daysUntil = Math.round((dueDate.getTime() - startOfToday.getTime()) / 86_400_000)
+
+  return (
+    <Card className="border-(--color-gold)/25 shadow-[0_0_30px_-12px_color-mix(in_srgb,var(--color-gold)_60%,transparent)]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-medium">
+          <Award size={17} className="text-(--color-gold)" />
+          Next Milestone Exam
+        </h2>
+        <span className="text-xs font-medium text-(--color-gold)">
+          {daysUntil <= 0 ? 'due today' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`}
+        </span>
+      </div>
+
+      <p className="mt-2 text-sm text-(--color-text-dim)">
+        {MILESTONE_EXAM_LABEL[next.data.bucket]} —{' '}
+        {dueDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        {next.data.bucket === 'monthly-test' && ' · covers everything practiced this month'}
+      </p>
+
+      {next.data.topics.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {next.data.topics.slice(0, 10).map((t) => (
+            <TopicTag key={t} topic={t} />
+          ))}
+        </div>
+      )}
+
+      <Button className="mt-4" onClick={() => generate.mutate(next.data!.bucket)} disabled={generate.isPending}>
+        {generate.isPending ? (
+          <>
+            <Spinner /> Building your exam…
+          </>
+        ) : (
+          'Start Milestone Exam'
+        )}
+      </Button>
+
+      {generate.isError && <p className="mt-2 text-sm text-(--color-hard)">{(generate.error as Error).message}</p>}
+    </Card>
+  )
+}
 
 /** Silently syncs recent LeetCode submissions once per Dashboard visit (server-side throttled to 5min). */
 function useAutoSync() {
@@ -44,11 +123,11 @@ function useAutoSync() {
 }
 
 const BUCKET_LABELS: Record<string, string> = {
-  '5': '5th of the month',
-  '10': '10th of the month',
-  '15': '15th of the month',
-  '20': '20th of the month',
-  'monthly-test': 'Monthly test (big test)',
+  '5': 'Milestone Exam — 5th of the month',
+  '10': 'Milestone Exam — 10th of the month',
+  '15': 'Milestone Exam — 15th of the month',
+  '20': 'Milestone Exam — 20th of the month',
+  'monthly-test': 'Monthly Milestone Exam (covers the full month)',
 }
 
 const CHECKPOINT_ORDER: Array<keyof ActivityTracker['byCheckpoint']> = ['5', '10', '15', '20', 'monthly-test']
@@ -127,7 +206,7 @@ function TimelyTracker() {
 
           <div className="mt-4">
             <div className="mb-2 text-xs uppercase tracking-wide text-(--color-text-faint)">
-              Upcoming reviews <span className="normal-case text-(--color-text-faint)">— not due yet, just scheduled</span>
+              Upcoming Milestone Exams <span className="normal-case text-(--color-text-faint)">— not due yet, just scheduled</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {CHECKPOINT_ORDER.map((bucket) => {
@@ -295,6 +374,8 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-(--color-text-dim)">Pure focus. Review what's due, then move on.</p>
       </div>
 
+      <MilestoneExamCard />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile icon={CheckCircle2} label="Unique questions tracked" value={overview.data?.totalQuestions ?? '—'} />
         <StatTile icon={ListChecks} label="Submissions tracked" value={overview.data?.totalAttempts ?? '—'} />
@@ -334,7 +415,7 @@ export default function Dashboard() {
             <EmptyState
               icon={CheckCircle2}
               title="Nothing due right now"
-              description="Log a question or two — they'll show up here on the 5th/10th/15th/20th, with a monthly test on the 30th."
+              description="Log a question or two — they'll show up here for Milestone Exams on the 5th/10th/15th/20th, with the Monthly Milestone Exam on the 30th."
               action={
                 <Link to="/log">
                   <Button variant="ghost">Log a question</Button>

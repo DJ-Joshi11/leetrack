@@ -1,13 +1,16 @@
 # Deployed Link : https://leetrack-client.vercel.app/
 # LeetTrack
 
-A minimalist, dark-themed spaced-repetition tracker for LeetCode practice. Log a question by number — everything else (difficulty, topics, optimal complexity, pattern) is fetched and AI-enriched automatically. Reviews are scheduled on calendar checkpoints (5th/10th/15th/20th of the month, with a big monthly test on the 30th), shuffled into timed mock tests, scored, and rolled up into an AI-generated improvement plan with validated question suggestions.
+A minimalist, dark-themed spaced-repetition tracker for LeetCode practice. Log a question by number — everything else (difficulty, topics, optimal complexity, pattern) is fetched and AI-enriched automatically, and fresh solves sync in on their own. Reviews land on calendar checkpoints (5th/10th/15th/20th of the month, with a Monthly Milestone Exam on the 30th), each with an auto-generated Milestone Exam mixing your own tracked questions with AI-suggested similar ones on the same topics.
 
 ## Features
 
 - **One-field logging** — type a question number, LeetCode's own data (title, difficulty, topics) is fetched automatically, and a free LLM fills in optimal time/space complexity and the core pattern.
+- **Automatic LeetCode sync** — connect your username once and freshly solved questions log themselves in the background; the Log page is reserved for backlog you haven't tracked yet.
 - **AI code review** — paste your solution and get an estimated complexity + correctness feedback.
-- **Calendar-based spaced repetition** — questions come due on the 5th/10th/15th/20th of the month, then a monthly test on the 30th, advancing or resetting based on your logged confidence.
+- **Calendar-based spaced repetition** — questions come due on the 5th/10th/15th/20th of the month, then a Monthly Milestone Exam on the 30th, advancing or resetting based on your logged confidence.
+- **Milestone Exams** — each checkpoint auto-builds a topic-scoped exam from what you practiced since the last one (the monthly exam covers the whole month), mixing already-tracked questions with AI-suggested similar ones, skewed toward Medium difficulty.
+- **Timely tracker & monthly timeline** — daily/monthly submission counts split into new vs. revised vs. backlog, plus a visual monthly schedule of every upcoming Milestone Exam.
 - **Shuffled, timed tests** — build a test from due/overdue/all questions, filtered by difficulty or topic, with a per-question and total timer.
 - **Scoring & history** — difficulty-weighted scores, accuracy by topic/difficulty, full test history (deletable).
 - **Real LeetCode activity heatmap** — connect your username to pull your actual submission calendar, total solved counts, and streak.

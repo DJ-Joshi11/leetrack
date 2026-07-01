@@ -86,12 +86,14 @@ export type Overview = {
   dueCount: number
 }
 
+export type MilestoneBucket = '5' | '10' | '15' | '20' | 'monthly-test'
+
 export type SubmissionCounts = { total: number; new: number; revised: number; backlog: number }
 
 export type ActivityTracker = {
   today: SubmissionCounts
   thisMonth: SubmissionCounts
-  byCheckpoint: Record<'5' | '10' | '15' | '20' | 'monthly-test', number>
+  byCheckpoint: Record<MilestoneBucket, number>
 }
 
 export type SyncResult = { synced: number; skipped: number; username: string | null; throttled: boolean }
@@ -103,11 +105,19 @@ export type ScheduleItem = {
   difficulty: Difficulty
   topics: string[]
   stage: number
-  bucket: '5' | '10' | '15' | '20' | 'monthly-test'
+  bucket: MilestoneBucket
   lastAttemptDate: string
   nextDue: string
   isDue: boolean
   daysOverdue: number
+}
+
+export type MilestoneNext = {
+  bucket: MilestoneBucket
+  dueDate: string
+  topics: string[]
+  poolSize: number
+  usedFallback: boolean
 }
 
 export type InsightsReport = {

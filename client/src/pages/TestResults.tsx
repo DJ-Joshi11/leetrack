@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Trophy, Target, CheckCircle2, Clock } from 'lucide-react'
+import { Trophy, Target, CheckCircle2, Clock, Award } from 'lucide-react'
 import { api, type TestResults as TestResultsType } from '../lib/api'
 import { Button, Card, DifficultyBadge, Spinner, StatTile } from '../components/ui'
 
@@ -40,11 +40,20 @@ export default function TestResults() {
   }))
 
   const weakest = topicChartData[0]
+  const config = JSON.parse(results.data.session.config || '{}')
+  const isMilestone = config.source === 'milestone'
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Results</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          Results
+          {isMilestone && (
+            <span className="flex items-center gap-1 rounded-full border border-(--color-gold)/30 px-2.5 py-0.5 text-xs font-medium text-(--color-gold)">
+              <Award size={12} /> Milestone Exam
+            </span>
+          )}
+        </h1>
         <p className="mt-1 text-sm text-(--color-text-dim)">Session #{id}</p>
       </div>
 

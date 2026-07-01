@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { Timer, Trash2 } from 'lucide-react'
+import { Timer, Trash2, Award } from 'lucide-react'
 import { api } from '../lib/api'
 import { Button, Card, ConfirmButton, EmptyState, Spinner } from '../components/ui'
 
@@ -8,6 +8,7 @@ type SessionSummary = {
   id: number
   started_at: string
   ended_at: string | null
+  config: string
   summary: {
     score: number
     accuracy: number
@@ -55,14 +56,23 @@ export default function History() {
       {sessions.data && sessions.data.sessions.length > 0 && (
         <Card className="p-0">
           <div className="divide-y divide-(--color-border)">
-            {sessions.data.sessions.map((s) => (
+            {sessions.data.sessions.map((s) => {
+              const isMilestone = JSON.parse(s.config || '{}').source === 'milestone'
+              return (
               <div
                 key={s.id}
                 onClick={() => navigate(`/test/${s.id}/results`)}
                 className="flex cursor-pointer items-center justify-between px-5 py-3 hover:bg-(--color-surface-2)"
               >
                 <div>
-                  <div className="text-sm">{new Date(s.started_at).toLocaleString()}</div>
+                  <div className="flex items-center gap-2 text-sm">
+                    {new Date(s.started_at).toLocaleString()}
+                    {isMilestone && (
+                      <span className="flex items-center gap-1 rounded-full border border-(--color-gold)/30 px-2 py-0.5 text-[10px] font-medium text-(--color-gold)">
+                        <Award size={10} /> Milestone
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-(--color-text-faint)">
                     {s.ended_at ? 'completed' : 'in progress'} · {s.summary.totalQuestions} questions
                   </div>
@@ -81,7 +91,8 @@ export default function History() {
                   </ConfirmButton>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       )}

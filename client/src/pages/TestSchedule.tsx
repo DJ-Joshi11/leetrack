@@ -1,16 +1,17 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { CalendarRange, Flag } from 'lucide-react'
-import { api, type ScheduleItem } from '../lib/api'
-import { Card, DifficultyBadge, EmptyState, Spinner } from '../components/ui'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { CalendarRange, Flag, Award } from 'lucide-react'
+import { api, type ScheduleItem, type MilestoneBucket, type TestSession } from '../lib/api'
+import { Button, Card, DifficultyBadge, EmptyState, Spinner } from '../components/ui'
 import { TestSectionTabs } from '../components/TestSectionTabs'
 
-const CHECKPOINTS: Array<{ day: number; bucket: ScheduleItem['bucket']; label: string; fullLabel: string }> = [
-  { day: 5, bucket: '5', label: '5th', fullLabel: '5th of the month' },
-  { day: 10, bucket: '10', label: '10th', fullLabel: '10th of the month' },
-  { day: 15, bucket: '15', label: '15th', fullLabel: '15th of the month' },
-  { day: 20, bucket: '20', label: '20th', fullLabel: '20th of the month' },
-  { day: 30, bucket: 'monthly-test', label: 'Test', fullLabel: 'Monthly test (big test)' },
+const CHECKPOINTS: Array<{ day: number; bucket: MilestoneBucket; label: string; fullLabel: string }> = [
+  { day: 5, bucket: '5', label: '5th', fullLabel: 'Milestone Exam — 5th of the month' },
+  { day: 10, bucket: '10', label: '10th', fullLabel: 'Milestone Exam — 10th of the month' },
+  { day: 15, bucket: '15', label: '15th', fullLabel: 'Milestone Exam — 15th of the month' },
+  { day: 20, bucket: '20', label: '20th', fullLabel: 'Milestone Exam — 20th of the month' },
+  { day: 30, bucket: 'monthly-test', label: 'Exam', fullLabel: 'Monthly Milestone Exam (covers the full month)' },
 ]
 
 function lastDayOfMonth(year: number, month: number) {
@@ -18,9 +19,15 @@ function lastDayOfMonth(year: number, month: number) {
 }
 
 export default function TestSchedule() {
+  const navigate = useNavigate()
   const schedule = useQuery({
     queryKey: ['review', 'schedule'],
     queryFn: () => api.get<{ items: ScheduleItem[] }>('/review/schedule'),
+  })
+
+  const generate = useMutation({
+    mutationFn: (bucket: MilestoneBucket) => api.post<{ session: TestSession }>('/tests/milestone/generate', { bucket }),
+    onSuccess: (data) => navigate(`/test/${data.session.id}`),
   })
 
   const now = new Date()
@@ -48,7 +55,9 @@ export default function TestSchedule() {
       <TestSectionTabs />
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Monthly schedule</h1>
-        <p className="mt-1 text-sm text-(--color-text-dim)">{monthLabel} — your review plan for this month.</p>
+        <p className="mt-1 text-sm text-(--color-text-dim)">
+          {monthLabel} — your Milestone Exam plan for this month.
+        </p>
       </div>
 
       {schedule.isLoading && (
@@ -61,9 +70,11 @@ export default function TestSchedule() {
         <EmptyState
           icon={CalendarRange}
           title="Nothing scheduled this month"
-          description="Log a question to put it on the calendar — checkpoints land on the 5th/10th/15th/20th, with a monthly test on the 30th."
+          description="Log a question to put it on the calendar — Milestone Exams land on the 5th/10th/15th/20th, with the Monthly Milestone Exam on the 30th."
         />
       )}
+
+      {generate.isError && <p className="mb-4 text-sm text-(--color-hard)">{(generate.error as Error).message}</p>}
 
       {itemsThisMonth.length > 0 && (
         <>
@@ -106,11 +117,27 @@ export default function TestSchedule() {
           <div className="mt-8 space-y-5">
             {CHECKPOINTS.filter((cp) => byCheckpoint[cp.bucket].length > 0).map((cp) => (
               <Card key={cp.bucket}>
-                <h2 className="flex items-center gap-2 font-medium">
-                  <Flag size={15} className="text-(--color-accent)" />
-                  {cp.fullLabel}
-                  <span className="text-sm font-normal text-(--color-text-faint)">· {byCheckpoint[cp.bucket].length}</span>
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center gap-2 font-medium">
+                    <Flag size={15} className="text-(--color-accent)" />
+                    {cp.fullLabel}
+                    <span className="text-sm font-normal text-(--color-text-faint)">· {byCheckpoint[cp.bucket].length}</span>
+                  </h2>
+                  <Button
+                    variant="ghost"
+                    onClick={() => generate.mutate(cp.bucket)}
+                    disabled={generate.isPending}
+                    className="text-xs"
+                  >
+                    {generate.isPending ? (
+                      <Spinner />
+                    ) : (
+                      <>
+                        <Award size={13} /> Start Milestone Exam
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <div className="mt-3 space-y-2">
                   {byCheckpoint[cp.bucket].map((item) => (
                     <div
