@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
-import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil } from 'lucide-react'
+import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock } from 'lucide-react'
 import {
   api,
   type DueResponse,
@@ -10,6 +10,7 @@ import {
   type InsightsReport,
   type LeetCodeProfile,
   type ActivityDay,
+  type ActivityTracker,
 } from '../lib/api'
 import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile } from '../components/ui'
 import { Heatmap } from '../components/Heatmap'
@@ -20,6 +21,72 @@ const BUCKET_LABELS: Record<string, string> = {
   '15': '15th of the month',
   '20': '20th of the month',
   'monthly-test': 'Monthly test (big test)',
+}
+
+const CHECKPOINT_ORDER: Array<keyof ActivityTracker['byCheckpoint']> = ['5', '10', '15', '20', 'monthly-test']
+const CHECKPOINT_SHORT_LABELS: Record<string, string> = {
+  '5': '5th',
+  '10': '10th',
+  '15': '15th',
+  '20': '20th',
+  'monthly-test': 'Monthly test',
+}
+
+function SubmissionStat({ label, counts }: { label: string; counts: { total: number; new: number; revised: number } }) {
+  return (
+    <div className="rounded-lg border border-(--color-border) bg-(--color-surface-2) p-4">
+      <div className="text-xs uppercase tracking-wide text-(--color-text-faint)">{label}</div>
+      <div className="mt-1 font-mono text-2xl font-semibold text-(--color-text)">{counts.total}</div>
+      <div className="mt-1 text-xs text-(--color-text-dim)">
+        <span className="text-(--color-accent)">{counts.new} new</span>
+        <span className="text-(--color-text-faint)"> · </span>
+        <span>{counts.revised} revised</span>
+      </div>
+    </div>
+  )
+}
+
+function TimelyTracker() {
+  const tracker = useQuery({ queryKey: ['stats', 'tracker'], queryFn: () => api.get<ActivityTracker>('/stats/tracker') })
+
+  return (
+    <Card>
+      <h2 className="flex items-center gap-2 font-medium">
+        <Clock size={16} className="text-(--color-accent)" />
+        Timely tracker
+      </h2>
+
+      {tracker.isLoading && (
+        <div className="mt-4 flex items-center gap-2 text-sm text-(--color-text-dim)">
+          <Spinner /> Loading…
+        </div>
+      )}
+
+      {tracker.data && (
+        <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <SubmissionStat label="Today" counts={tracker.data.today} />
+            <SubmissionStat label="This month" counts={tracker.data.thisMonth} />
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-(--color-text-faint)">On track</div>
+            <div className="flex flex-wrap gap-2">
+              {CHECKPOINT_ORDER.map((bucket) => (
+                <div
+                  key={bucket}
+                  className="rounded-full border border-(--color-border) px-3 py-1 text-xs text-(--color-text-dim)"
+                >
+                  {CHECKPOINT_SHORT_LABELS[bucket]}
+                  <span className="ml-1.5 font-mono text-(--color-text)">{tracker.data.byCheckpoint[bucket] ?? 0}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
+  )
 }
 
 function LeetCodeProfileCard() {
@@ -167,8 +234,8 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile icon={CheckCircle2} label="Questions logged" value={overview.data?.totalQuestions ?? '—'} />
-        <StatTile icon={ListChecks} label="Total attempts" value={overview.data?.totalAttempts ?? '—'} />
+        <StatTile icon={CheckCircle2} label="Unique questions tracked" value={overview.data?.totalQuestions ?? '—'} />
+        <StatTile icon={ListChecks} label="Submissions tracked" value={overview.data?.totalAttempts ?? '—'} />
         <StatTile
           icon={CalendarClock}
           label="Due today"
@@ -176,6 +243,8 @@ export default function Dashboard() {
           sub={due.data?.overdueCount ? `${due.data.overdueCount} overdue` : undefined}
         />
       </div>
+
+      <TimelyTracker />
 
       <LeetCodeProfileCard />
 

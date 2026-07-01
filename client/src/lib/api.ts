@@ -86,6 +86,14 @@ export type Overview = {
   dueCount: number
 }
 
+export type SubmissionCounts = { total: number; new: number; revised: number }
+
+export type ActivityTracker = {
+  today: SubmissionCounts
+  thisMonth: SubmissionCounts
+  byCheckpoint: Record<'5' | '10' | '15' | '20' | 'monthly-test', number>
+}
+
 export type InsightsReport = {
   id: number
   generated_at: string

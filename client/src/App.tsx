@@ -29,7 +29,8 @@ function App() {
       {!isFocusMode && (
         <header className="sticky top-0 z-10 border-b border-(--color-border) bg-(--color-bg)/85 backdrop-blur-md">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <span className="font-mono text-sm font-semibold tracking-tight text-(--color-text)">
+            <span className="flex items-center gap-2 font-mono text-sm font-semibold tracking-tight text-(--color-text)">
+              <img src="/favicon.svg" alt="" width={22} height={22} className="rounded-[6px]" />
               leet<span className="text-(--color-accent)">rack</span>
             </span>
             <nav className="flex items-center gap-1">
