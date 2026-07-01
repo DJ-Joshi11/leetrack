@@ -56,9 +56,10 @@ export default function Import() {
 
   const submit = useMutation({
     mutationFn: () =>
-      api.post<{ results: Array<{ number: number; ok: boolean; error?: string }> }>('/questions/bulk', {
-        lines: validLines.map(({ number, date, confidence }) => ({ number, date, confidence })),
-      }),
+      api.post<{ results: Array<{ number: number; ok: boolean; skipped?: boolean; error?: string }> }>(
+        '/questions/bulk',
+        { lines: validLines.map(({ number, date, confidence }) => ({ number, date, confidence })) }
+      ),
   })
 
   return (
@@ -136,7 +137,9 @@ export default function Import() {
               <div key={i} className="flex items-center justify-between rounded px-2 py-1 odd:bg-(--color-surface-2)">
                 <span className="font-mono">#{r.number}</span>
                 {r.ok ? (
-                  <span className="text-(--color-easy)">saved</span>
+                  <span className={r.skipped ? 'text-(--color-text-faint)' : 'text-(--color-easy)'}>
+                    {r.skipped ? 'already logged for that date — skipped' : 'saved'}
+                  </span>
                 ) : (
                   <span className="text-(--color-hard)">{r.error}</span>
                 )}

@@ -15,11 +15,11 @@ import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile } f
 import { Heatmap } from '../components/Heatmap'
 
 const BUCKET_LABELS: Record<string, string> = {
-  '7': '7-day review',
-  '10': '10-day review',
-  '15': '15-day review',
-  '30': '30-day review',
-  maintenance: 'Maintenance',
+  '5': '5th of the month',
+  '10': '10th of the month',
+  '15': '15th of the month',
+  '20': '20th of the month',
+  'monthly-test': 'Monthly test (big test)',
 }
 
 function LeetCodeProfileCard() {
@@ -203,7 +203,7 @@ export default function Dashboard() {
             <EmptyState
               icon={CheckCircle2}
               title="Nothing due right now"
-              description="Log a question or two — they'll show up here at the 7/10/15/30-day marks."
+              description="Log a question or two — they'll show up here on the 5th/10th/15th/20th, with a monthly test on the 30th."
               action={
                 <Link to="/log">
                   <Button variant="ghost">Log a question</Button>

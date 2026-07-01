@@ -74,7 +74,7 @@ export type DueBucketItem = {
 }
 
 export type DueResponse = {
-  buckets: Record<'7' | '10' | '15' | '30' | 'maintenance', DueBucketItem[]>
+  buckets: Record<'5' | '10' | '15' | '20' | 'monthly-test', DueBucketItem[]>
   overdueCount: number
   dueTotal: number
 }
