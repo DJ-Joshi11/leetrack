@@ -1,0 +1,187 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ExternalLink, ListChecks, Timer as TimerIcon, MousePointerClick } from 'lucide-react'
+import { api, type TestResults } from '../lib/api'
+import { Button, Card, DifficultyBadge, Spinner, TopicTag } from '../components/ui'
+
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+const RESULT_OPTIONS: Array<{ value: 'correct' | 'struggled' | 'failed' | 'skipped'; label: string; className: string }> = [
+  { value: 'correct', label: 'Solved', className: 'border-(--color-easy)/40 text-(--color-easy) hover:bg-(--color-easy)/10' },
+  { value: 'struggled', label: 'Struggled', className: 'border-(--color-medium)/40 text-(--color-medium) hover:bg-(--color-medium)/10' },
+  { value: 'failed', label: 'Failed', className: 'border-(--color-hard)/40 text-(--color-hard) hover:bg-(--color-hard)/10' },
+  { value: 'skipped', label: 'Skip', className: 'border-(--color-border) text-(--color-text-dim) hover:border-(--color-text-dim)' },
+]
+
+export default function TestRunner() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const session = useQuery({ queryKey: ['test', id], queryFn: () => api.get<TestResults>(`/tests/${id}`) })
+
+  const [started, setStarted] = useState(false)
+  const [index, setIndex] = useState(0)
+  const [questionElapsed, setQuestionElapsed] = useState(0)
+  const [totalElapsed, setTotalElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!started) return
+    const t = setInterval(() => {
+      setQuestionElapsed((s) => s + 1)
+      setTotalElapsed((s) => s + 1)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [started])
+
+  useEffect(() => {
+    setQuestionElapsed(0)
+  }, [index])
+
+  const config = useMemo(() => (session.data ? JSON.parse(session.data.session.config) : {}), [session.data])
+  const perQuestionSec: number | null = config.perQuestionSec ?? null
+
+  const mark = useMutation({
+    mutationFn: (result: string) =>
+      api.patch(`/tests/${id}/questions/${current!.question_id}`, { result, time_spent_sec: questionElapsed }),
+  })
+
+  const finish = useMutation({
+    mutationFn: () => api.post(`/tests/${id}/finish`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['test', id] })
+      navigate(`/test/${id}/results`)
+    },
+  })
+
+  if (session.isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner />
+      </div>
+    )
+  }
+
+  if (session.isError || !session.data) {
+    return (
+      <div className="flex h-screen items-center justify-center text-(--color-hard)">
+        {(session.error as Error)?.message ?? 'Test not found'}
+      </div>
+    )
+  }
+
+  const items = session.data.items
+  const current = items[index]
+  const isLast = index === items.length - 1
+  const overTime = perQuestionSec != null && questionElapsed > perQuestionSec
+
+  async function handleMark(result: string) {
+    await mark.mutateAsync(result)
+    if (isLast) {
+      finish.mutate()
+    } else {
+      setIndex((i) => i + 1)
+    }
+  }
+
+  if (!started) {
+    return (
+      <div className="flex h-screen items-center justify-center px-6">
+        <Card className="w-full max-w-md">
+          <h1 className="text-lg font-semibold tracking-tight">Before you start</h1>
+          <ul className="mt-4 space-y-3 text-sm text-(--color-text-dim)">
+            <li className="flex gap-2.5">
+              <ExternalLink size={16} className="mt-0.5 shrink-0 text-(--color-accent)" />
+              Each question shows its number and title with an "Open on LeetCode" button — click it, solve the
+              problem there.
+            </li>
+            <li className="flex gap-2.5">
+              <MousePointerClick size={16} className="mt-0.5 shrink-0 text-(--color-accent)" />
+              Come back here and self-mark it Solved, Struggled, Failed, or Skip.
+            </li>
+            <li className="flex gap-2.5">
+              <TimerIcon size={16} className="mt-0.5 shrink-0 text-(--color-accent)" />
+              {perQuestionSec != null
+                ? `A ${formatTime(perQuestionSec)} soft timer runs per question, plus a total session timer. Neither auto-submits — they're just for pacing.`
+                : 'A timer tracks time per question and for the whole session — no limit is enforced.'}
+            </li>
+            <li className="flex gap-2.5">
+              <ListChecks size={16} className="mt-0.5 shrink-0 text-(--color-accent)" />
+              {items.length} question{items.length === 1 ? '' : 's'} in this session, shuffled. Results and a topic
+              breakdown are waiting for you at the end.
+            </li>
+          </ul>
+          <Button className="mt-6 w-full" onClick={() => setStarted(true)}>
+            Start test
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-screen flex-col items-center justify-center px-6">
+      <div className="absolute top-6 left-6 font-mono text-xs text-(--color-text-faint)">
+        question {index + 1} / {items.length}
+      </div>
+      <div className="absolute top-6 right-6 font-mono text-xs text-(--color-text-faint)">
+        total {formatTime(totalElapsed)}
+      </div>
+
+      <div className="w-full max-w-xl text-center">
+        <div className={`font-mono text-4xl font-semibold ${overTime ? 'text-(--color-hard)' : 'text-(--color-accent)'}`}>
+          {formatTime(questionElapsed)}
+          {perQuestionSec != null && <span className="text-(--color-text-faint)"> / {formatTime(perQuestionSec)}</span>}
+        </div>
+
+        <div className="mt-8 flex items-center justify-center gap-3">
+          <span className="font-mono text-(--color-text-dim)">#{current.number}</span>
+          <DifficultyBadge difficulty={current.difficulty} />
+        </div>
+        <h1 className="mt-2 text-2xl font-semibold">{current.title}</h1>
+
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          {current.topics.map((t) => (
+            <TopicTag key={t} topic={t} />
+          ))}
+        </div>
+
+        <a
+          href={current.leetcode_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-(--color-accent)/40 px-3 py-1.5 text-sm text-(--color-accent) transition-colors hover:bg-(--color-accent)/10"
+        >
+          <ExternalLink size={14} /> Open on LeetCode
+        </a>
+
+        <div className="mt-10 flex justify-center gap-3">
+          {RESULT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleMark(opt.value)}
+              disabled={mark.isPending || finish.isPending}
+              className={`rounded-lg border px-4 py-2 text-sm transition-colors disabled:opacity-40 ${opt.className}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {(mark.isPending || finish.isPending) && (
+          <div className="mt-4 flex justify-center">
+            <Spinner />
+          </div>
+        )}
+      </div>
+
+      <Button variant="ghost" className="absolute bottom-6" onClick={() => navigate('/')}>
+        Exit test
+      </Button>
+    </div>
+  )
+}
