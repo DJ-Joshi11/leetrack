@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
-import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock } from 'lucide-react'
+import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock, RefreshCw } from 'lucide-react'
 import {
   api,
   type DueResponse,
@@ -11,9 +11,37 @@ import {
   type LeetCodeProfile,
   type ActivityDay,
   type ActivityTracker,
+  type SyncResult,
 } from '../lib/api'
 import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile } from '../components/ui'
 import { Heatmap } from '../components/Heatmap'
+
+/** Silently syncs recent LeetCode submissions once per Dashboard visit (server-side throttled to 5min). */
+function useAutoSync() {
+  const queryClient = useQueryClient()
+  const firedRef = useRef(false)
+
+  const sync = useMutation({
+    mutationFn: () => api.post<SyncResult>('/leetcode/sync'),
+    onSuccess: (result) => {
+      if (result.synced > 0) {
+        queryClient.invalidateQueries({ queryKey: ['stats'] })
+        queryClient.invalidateQueries({ queryKey: ['review'] })
+        queryClient.invalidateQueries({ queryKey: ['questions'] })
+        queryClient.invalidateQueries({ queryKey: ['leetcode', 'profile'] })
+      }
+    },
+  })
+
+  useEffect(() => {
+    if (firedRef.current) return
+    firedRef.current = true
+    sync.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return sync
+}
 
 const BUCKET_LABELS: Record<string, string> = {
   '5': '5th of the month',
@@ -32,15 +60,27 @@ const CHECKPOINT_SHORT_LABELS: Record<string, string> = {
   'monthly-test': 'Monthly test',
 }
 
-function SubmissionStat({ label, counts }: { label: string; counts: { total: number; new: number; revised: number } }) {
+function SubmissionStat({
+  label,
+  counts,
+}: {
+  label: string
+  counts: { total: number; new: number; revised: number; backlog: number }
+}) {
   return (
     <div className="rounded-lg border border-(--color-border) bg-(--color-surface-2) p-4">
       <div className="text-xs uppercase tracking-wide text-(--color-text-faint)">{label}</div>
       <div className="mt-1 font-mono text-2xl font-semibold text-(--color-text)">{counts.total}</div>
-      <div className="mt-1 text-xs text-(--color-text-dim)">
+      <div className="mt-1 flex flex-wrap gap-x-1.5 text-xs text-(--color-text-dim)">
         <span className="text-(--color-accent)">{counts.new} new</span>
-        <span className="text-(--color-text-faint)"> · </span>
+        <span className="text-(--color-text-faint)">·</span>
         <span>{counts.revised} revised</span>
+        {counts.backlog > 0 && (
+          <>
+            <span className="text-(--color-text-faint)">·</span>
+            <span className="text-(--color-text-faint)">{counts.backlog} backlog</span>
+          </>
+        )}
       </div>
     </div>
   )
@@ -48,13 +88,24 @@ function SubmissionStat({ label, counts }: { label: string; counts: { total: num
 
 function TimelyTracker() {
   const tracker = useQuery({ queryKey: ['stats', 'tracker'], queryFn: () => api.get<ActivityTracker>('/stats/tracker') })
+  const sync = useAutoSync()
 
   return (
     <Card>
-      <h2 className="flex items-center gap-2 font-medium">
-        <Clock size={16} className="text-(--color-accent)" />
-        Timely tracker
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-medium">
+          <Clock size={16} className="text-(--color-accent)" />
+          Timely tracker
+        </h2>
+        {sync.isPending && (
+          <span className="flex items-center gap-1.5 text-xs text-(--color-text-faint)">
+            <RefreshCw size={12} className="animate-spin" /> syncing LeetCode…
+          </span>
+        )}
+        {sync.data && sync.data.synced > 0 && (
+          <span className="text-xs text-(--color-accent)">synced {sync.data.synced} new from LeetCode</span>
+        )}
+      </div>
 
       {tracker.isLoading && (
         <div className="mt-4 flex items-center gap-2 text-sm text-(--color-text-dim)">

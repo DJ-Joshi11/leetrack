@@ -35,9 +35,14 @@ export default function LogQuestion() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Log a question</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Add a past question</h1>
         <p className="mt-1 text-sm text-(--color-text-dim)">
-          Type the question number — title, difficulty, topics, and optimal complexity are fetched automatically.
+          For backlog — questions you've already solved on LeetCode that aren't tracked here yet. Pick the date you
+          actually solved it. Title, difficulty, topics, and optimal complexity are fetched automatically.
+        </p>
+        <p className="mt-1 text-xs text-(--color-text-faint)">
+          Freshly solved something? No need to add it here — connect your LeetCode username on the Dashboard and it
+          syncs in automatically.
         </p>
       </div>
 

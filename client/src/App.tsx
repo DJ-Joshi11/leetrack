@@ -5,6 +5,7 @@ import LogQuestion from './pages/LogQuestion'
 import Import from './pages/Import'
 import QuestionBank from './pages/QuestionBank'
 import TestNew from './pages/TestNew'
+import TestSchedule from './pages/TestSchedule'
 import TestRunner from './pages/TestRunner'
 import TestResults from './pages/TestResults'
 import History from './pages/History'
@@ -65,6 +66,7 @@ function App() {
           <Route path="/import" element={<Import />} />
           <Route path="/questions" element={<QuestionBank />} />
           <Route path="/test/new" element={<TestNew />} />
+          <Route path="/test/schedule" element={<TestSchedule />} />
           <Route path="/test/:id" element={<TestRunner />} />
           <Route path="/test/:id/results" element={<TestResults />} />
           <Route path="/history" element={<History />} />

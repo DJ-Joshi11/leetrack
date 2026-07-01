@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api, type Question, type TestSession, type Difficulty } from '../lib/api'
 import { Button, Card, Input, Select } from '../components/ui'
+import { TestSectionTabs } from '../components/TestSectionTabs'
 
 const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard']
 
@@ -39,8 +40,9 @@ export default function TestNew() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
+    <div className="mx-auto max-w-xl">
+      <TestSectionTabs />
+      <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Build a review test</h1>
         <p className="mt-1 text-sm text-(--color-text-dim)">Shuffled, timed, scored.</p>
       </div>

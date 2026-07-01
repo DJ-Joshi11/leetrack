@@ -86,12 +86,28 @@ export type Overview = {
   dueCount: number
 }
 
-export type SubmissionCounts = { total: number; new: number; revised: number }
+export type SubmissionCounts = { total: number; new: number; revised: number; backlog: number }
 
 export type ActivityTracker = {
   today: SubmissionCounts
   thisMonth: SubmissionCounts
   byCheckpoint: Record<'5' | '10' | '15' | '20' | 'monthly-test', number>
+}
+
+export type SyncResult = { synced: number; skipped: number; username: string | null; throttled: boolean }
+
+export type ScheduleItem = {
+  id: number
+  number: number
+  title: string
+  difficulty: Difficulty
+  topics: string[]
+  stage: number
+  bucket: '5' | '10' | '15' | '20' | 'monthly-test'
+  lastAttemptDate: string
+  nextDue: string
+  isDue: boolean
+  daysOverdue: number
 }
 
 export type InsightsReport = {
