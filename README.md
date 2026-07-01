@@ -1,3 +1,4 @@
+# Deployed Link : https://leetrack-client.vercel.app/
 # LeetTrack
 
 A minimalist, dark-themed spaced-repetition tracker for LeetCode practice. Log a question by number — everything else (difficulty, topics, optimal complexity, pattern) is fetched and AI-enriched automatically. Reviews are scheduled on a 7/10/15/30-day cadence, shuffled into timed mock tests, scored, and rolled up into an AI-generated improvement plan with validated question suggestions.
