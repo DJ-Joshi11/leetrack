@@ -1,17 +1,16 @@
 import { Router } from "express";
-import { db } from "../lib/db.js";
+import { sql } from "../lib/db.js";
 import { computeQuestionState } from "../lib/review.js";
 
 export const statsRouter = Router();
 
 // GET /api/stats/overview -> totals, streak, due counts
-statsRouter.get("/overview", (_req, res) => {
-  const totalQuestions = (db.prepare("SELECT COUNT(*) as c FROM questions").get() as any).c;
-  const totalAttempts = (db.prepare("SELECT COUNT(*) as c FROM attempts").get() as any).c;
+statsRouter.get("/overview", async (_req, res) => {
+  const [{ c: totalQuestions }] = await sql`SELECT COUNT(*)::int as c FROM questions`;
+  const [{ c: totalAttempts }] = await sql`SELECT COUNT(*)::int as c FROM attempts`;
 
-  const attemptDates = (db.prepare("SELECT DISTINCT date FROM attempts ORDER BY date DESC").all() as any[]).map(
-    (r) => r.date
-  );
+  const attemptDateRows = await sql`SELECT DISTINCT date FROM attempts ORDER BY date DESC`;
+  const attemptDates = attemptDateRows.map((r) => r.date);
   let streak = 0;
   let cursor = new Date();
   for (const dateStr of attemptDates) {
@@ -25,8 +24,8 @@ statsRouter.get("/overview", (_req, res) => {
     }
   }
 
-  const questions = db.prepare("SELECT * FROM questions").all() as any[];
-  const attempts = db.prepare("SELECT * FROM attempts ORDER BY date ASC").all() as any[];
+  const questions = await sql`SELECT * FROM questions`;
+  const attempts = await sql`SELECT * FROM attempts ORDER BY date ASC`;
   const byQuestion = new Map<number, any[]>();
   for (const a of attempts) {
     if (!byQuestion.has(a.question_id)) byQuestion.set(a.question_id, []);
@@ -44,12 +43,9 @@ statsRouter.get("/overview", (_req, res) => {
 });
 
 // GET /api/stats/activity -> trailing-365-day attempt counts by date (heatmap fallback when no LeetCode username is set)
-statsRouter.get("/activity", (_req, res) => {
-  const rows = db.prepare("SELECT date, COUNT(*) as count FROM attempts GROUP BY date").all() as Array<{
-    date: string;
-    count: number;
-  }>;
-  const byDate = new Map(rows.map((r) => [r.date, r.count]));
+statsRouter.get("/activity", async (_req, res) => {
+  const rows = await sql`SELECT date, COUNT(*)::int as count FROM attempts GROUP BY date`;
+  const byDate = new Map(rows.map((r) => [r.date as string, r.count as number]));
 
   const now = new Date();
   const calendar: Array<{ date: string; count: number }> = [];
@@ -64,15 +60,13 @@ statsRouter.get("/activity", (_req, res) => {
 });
 
 // GET /api/stats/weak-topics -> accuracy aggregated by topic from test history
-statsRouter.get("/weak-topics", (_req, res) => {
-  const rows = db
-    .prepare(
-      `SELECT tsq.result, q.topics, q.difficulty
-       FROM test_session_questions tsq
-       JOIN questions q ON q.id = tsq.question_id
-       WHERE tsq.result IS NOT NULL`
-    )
-    .all() as any[];
+statsRouter.get("/weak-topics", async (_req, res) => {
+  const rows = await sql`
+    SELECT tsq.result, q.topics, q.difficulty
+    FROM test_session_questions tsq
+    JOIN questions q ON q.id = tsq.question_id
+    WHERE tsq.result IS NOT NULL
+  `;
 
   const byTopic: Record<string, { total: number; correct: number }> = {};
   for (const r of rows) {

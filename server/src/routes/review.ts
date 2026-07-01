@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { db } from "../lib/db.js";
+import { sql } from "../lib/db.js";
 import { computeQuestionState } from "../lib/review.js";
 
 export const reviewRouter = Router();
 
-function loadQuestionsWithAttempts() {
-  const questions = db.prepare("SELECT * FROM questions").all() as any[];
-  const attempts = db.prepare("SELECT * FROM attempts ORDER BY date ASC").all() as any[];
+async function loadQuestionsWithAttempts() {
+  const questions = await sql`SELECT * FROM questions`;
+  const attempts = await sql`SELECT * FROM attempts ORDER BY date ASC`;
   const byQuestion = new Map<number, any[]>();
   for (const a of attempts) {
     if (!byQuestion.has(a.question_id)) byQuestion.set(a.question_id, []);
@@ -16,11 +16,11 @@ function loadQuestionsWithAttempts() {
 }
 
 // GET /api/review/due -> due questions grouped by bucket, plus overdue count
-reviewRouter.get("/due", (_req, res) => {
-  const { questions, byQuestion } = loadQuestionsWithAttempts();
+reviewRouter.get("/due", async (_req, res) => {
+  const { questions, byQuestion } = await loadQuestionsWithAttempts();
   const now = new Date();
 
-  const buckets: Record<string, any[]> = { "7": [], "10": [], "15": [], "30": [], maintenance: [] };
+  const buckets: Record<string, any[]> = { "5": [], "10": [], "15": [], "20": [], "monthly-test": [] };
   let overdueCount = 0;
 
   for (const q of questions) {

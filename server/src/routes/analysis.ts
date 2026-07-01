@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../lib/db.js";
+import { sql } from "../lib/db.js";
 import { lookupQuestionByNumber } from "../lib/leetcode.js";
 import { generateAnalysisPlan } from "../lib/llm.js";
 
@@ -8,9 +8,9 @@ export const analysisRouter = Router();
 const DIFFICULTY_WEIGHT: Record<string, number> = { Easy: 1, Medium: 2, Hard: 3 };
 
 // GET /api/analysis/charts -> live-computed chart data, no AI involved
-analysisRouter.get("/charts", (_req, res) => {
-  const questions = db.prepare("SELECT * FROM questions").all() as any[];
-  const attempts = db.prepare("SELECT * FROM attempts ORDER BY date ASC").all() as any[];
+analysisRouter.get("/charts", async (_req, res) => {
+  const questions = await sql`SELECT * FROM questions`;
+  const attempts = await sql`SELECT * FROM attempts ORDER BY date ASC`;
 
   const topicCounts: Record<string, number> = {};
   const difficultyCounts: Record<string, number> = {};
@@ -33,31 +33,28 @@ analysisRouter.get("/charts", (_req, res) => {
     .map(([date, v]) => ({ date, avgConfidence: Math.round((v.sum / v.count) * 10) / 10 }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const sessions = db.prepare("SELECT * FROM test_sessions WHERE ended_at IS NOT NULL ORDER BY started_at ASC").all() as any[];
-  const scoreTrend = sessions.map((s) => {
-    const items = db
-      .prepare(
-        `SELECT tsq.result, q.difficulty FROM test_session_questions tsq
-         JOIN questions q ON q.id = tsq.question_id WHERE tsq.session_id = ?`
-      )
-      .all(s.id) as any[];
+  const sessions = await sql`SELECT * FROM test_sessions WHERE ended_at IS NOT NULL ORDER BY started_at ASC`;
+  const scoreTrend = [];
+  for (const s of sessions) {
+    const items = await sql`
+      SELECT tsq.result, q.difficulty FROM test_session_questions tsq
+      JOIN questions q ON q.id = tsq.question_id WHERE tsq.session_id = ${s.id}
+    `;
     const answered = items.filter((i) => i.result);
     const correct = items.filter((i) => i.result === "correct");
     const totalWeight = items.reduce((sum, i) => sum + (DIFFICULTY_WEIGHT[i.difficulty] ?? 1), 0);
     const earnedWeight = correct.reduce((sum, i) => sum + (DIFFICULTY_WEIGHT[i.difficulty] ?? 1), 0);
-    return {
+    scoreTrend.push({
       date: String(s.started_at).slice(0, 10),
       score: totalWeight ? Math.round((earnedWeight / totalWeight) * 100) : 0,
       accuracy: answered.length ? Math.round((correct.length / answered.length) * 100) : 0,
-    };
-  });
+    });
+  }
 
-  const testRows = db
-    .prepare(
-      `SELECT tsq.result, q.topics FROM test_session_questions tsq
-       JOIN questions q ON q.id = tsq.question_id WHERE tsq.result IS NOT NULL`
-    )
-    .all() as any[];
+  const testRows = await sql`
+    SELECT tsq.result, q.topics FROM test_session_questions tsq
+    JOIN questions q ON q.id = tsq.question_id WHERE tsq.result IS NOT NULL
+  `;
   const topicAcc: Record<string, { total: number; correct: number }> = {};
   for (const r of testRows) {
     for (const t of JSON.parse(r.topics ?? "[]")) {
@@ -83,25 +80,21 @@ analysisRouter.get("/charts", (_req, res) => {
 });
 
 // GET /api/analysis/latest
-analysisRouter.get("/latest", (_req, res) => {
-  const row = db.prepare("SELECT * FROM analysis_reports ORDER BY generated_at DESC LIMIT 1").get() as
-    | { id: number; generated_at: string; data: string }
-    | undefined;
+analysisRouter.get("/latest", async (_req, res) => {
+  const [row] = await sql`SELECT * FROM analysis_reports ORDER BY generated_at DESC LIMIT 1`;
   res.json({ report: row ? { id: row.id, generated_at: row.generated_at, ...JSON.parse(row.data) } : null });
 });
 
 // POST /api/analysis/generate
 analysisRouter.post("/generate", async (_req, res) => {
-  const questions = db.prepare("SELECT * FROM questions").all() as any[];
-  const attempts = db.prepare("SELECT * FROM attempts").all() as any[];
+  const questions = await sql`SELECT * FROM questions`;
+  const attempts = await sql`SELECT * FROM attempts`;
   if (!questions.length) return res.status(400).json({ error: "Log some questions before generating an analysis" });
 
-  const testItems = db
-    .prepare(
-      `SELECT tsq.result, q.number, q.title, q.difficulty, q.topics FROM test_session_questions tsq
-       JOIN questions q ON q.id = tsq.question_id WHERE tsq.result IS NOT NULL`
-    )
-    .all() as any[];
+  const testItems = await sql`
+    SELECT tsq.result, q.number, q.title, q.difficulty, q.topics FROM test_session_questions tsq
+    JOIN questions q ON q.id = tsq.question_id WHERE tsq.result IS NOT NULL
+  `;
 
   const topicCounts: Record<string, number> = {};
   const difficultyCounts: Record<string, number> = {};
@@ -163,12 +156,7 @@ analysisRouter.post("/generate", async (_req, res) => {
       plan: plan.plan,
       suggestedQuestions,
     };
-    const info = db.prepare("INSERT INTO analysis_reports (data) VALUES (?)").run(JSON.stringify(data));
-    const row = db.prepare("SELECT * FROM analysis_reports WHERE id = ?").get(info.lastInsertRowid) as {
-      id: number;
-      generated_at: string;
-      data: string;
-    };
+    const [row] = await sql`INSERT INTO analysis_reports (data) VALUES (${JSON.stringify(data)}) RETURNING *`;
     res.status(201).json({ report: { id: row.id, generated_at: row.generated_at, ...JSON.parse(row.data) } });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });

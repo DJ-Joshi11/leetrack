@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import "./lib/db.js";
+import { initSchema } from "./lib/db.js";
 import { questionsRouter } from "./routes/questions.js";
 import { reviewRouter } from "./routes/review.js";
 import { testsRouter } from "./routes/tests.js";
@@ -27,4 +27,12 @@ app.use("/api/analysis", analysisRouter);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`leetrack server listening on http://localhost:${port}`));
+
+initSchema()
+  .then(() => {
+    app.listen(port, () => console.log(`leetrack server listening on http://localhost:${port}`));
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database schema:", err);
+    process.exit(1);
+  });

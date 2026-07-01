@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../lib/db.js";
+import { sql, nowText } from "../lib/db.js";
 import { computeQuestionState } from "../lib/review.js";
 
 export const testsRouter = Router();
@@ -16,7 +16,7 @@ function shuffle<T>(arr: T[]): T[] {
 const DIFFICULTY_WEIGHT: Record<string, number> = { Easy: 1, Medium: 2, Hard: 3 };
 
 // POST /api/tests { count, difficulties?, topics?, source, perQuestionSec?, totalSec? }
-testsRouter.post("/", (req, res) => {
+testsRouter.post("/", async (req, res) => {
   const count = Number(req.body.count ?? 10);
   const difficulties: string[] | undefined = req.body.difficulties;
   const topics: string[] | undefined = req.body.topics;
@@ -24,8 +24,8 @@ testsRouter.post("/", (req, res) => {
   const perQuestionSec = req.body.perQuestionSec ?? null;
   const totalSec = req.body.totalSec ?? null;
 
-  const questions = db.prepare("SELECT * FROM questions").all() as any[];
-  const attempts = db.prepare("SELECT * FROM attempts ORDER BY date ASC").all() as any[];
+  const questions = await sql`SELECT * FROM questions`;
+  const attempts = await sql`SELECT * FROM attempts ORDER BY date ASC`;
   const byQuestion = new Map<number, any[]>();
   for (const a of attempts) {
     if (!byQuestion.has(a.question_id)) byQuestion.set(a.question_id, []);
@@ -53,81 +53,85 @@ testsRouter.post("/", (req, res) => {
   if (!selected.length) return res.status(400).json({ error: "No questions match this test configuration" });
 
   const config = { count, difficulties, topics, source, perQuestionSec, totalSec };
-  const sessionInfo = db.prepare(`INSERT INTO test_sessions (config) VALUES (?)`).run(JSON.stringify(config));
-  const sessionId = sessionInfo.lastInsertRowid;
+  const [session] = await sql`INSERT INTO test_sessions (config) VALUES (${JSON.stringify(config)}) RETURNING id`;
+  const sessionId = session.id;
 
-  const insertSQ = db.prepare(
-    `INSERT INTO test_session_questions (session_id, question_id, order_index) VALUES (?, ?, ?)`
-  );
-  selected.forEach((q, idx) => insertSQ.run(sessionId, q.id, idx));
+  for (let idx = 0; idx < selected.length; idx++) {
+    await sql`INSERT INTO test_session_questions (session_id, question_id, order_index) VALUES (${sessionId}, ${selected[idx].id}, ${idx})`;
+  }
 
   const sessionQuestions = selected.map((q, idx) => ({
     order_index: idx,
-    question: { id: q.id, number: q.number, title: q.title, difficulty: q.difficulty, topics: JSON.parse(q.topics ?? "[]"), leetcode_url: q.leetcode_url },
+    question: {
+      id: q.id,
+      number: q.number,
+      title: q.title,
+      difficulty: q.difficulty,
+      topics: JSON.parse(q.topics ?? "[]"),
+      leetcode_url: q.leetcode_url,
+    },
   }));
 
   res.status(201).json({ session: { id: sessionId, config, questions: sessionQuestions } });
 });
 
 // GET /api/tests -> list past sessions with summary stats
-testsRouter.get("/", (_req, res) => {
-  const sessions = db.prepare("SELECT * FROM test_sessions ORDER BY started_at DESC").all() as any[];
-  const list = sessions.map((s) => {
-    const { summary } = buildResults(String(s.id));
-    return { ...s, summary };
-  });
+testsRouter.get("/", async (_req, res) => {
+  const sessions = await sql`SELECT * FROM test_sessions ORDER BY started_at DESC`;
+  const list = [];
+  for (const s of sessions) {
+    const { summary } = await buildResults(s.id);
+    list.push({ ...s, summary });
+  }
   res.json({ sessions: list });
 });
 
 // PATCH /api/tests/:id/questions/:qid { result, time_spent_sec }
-testsRouter.patch("/:id/questions/:qid", (req, res) => {
+testsRouter.patch("/:id/questions/:qid", async (req, res) => {
   const { result, time_spent_sec } = req.body;
-  const info = db
-    .prepare(
-      `UPDATE test_session_questions SET result = ?, time_spent_sec = ?, answered_at = datetime('now')
-       WHERE session_id = ? AND question_id = ?`
-    )
-    .run(result, time_spent_sec ?? null, req.params.id, req.params.qid);
-  if (info.changes === 0) return res.status(404).json({ error: "Not found" });
+  const updated = await sql`
+    UPDATE test_session_questions SET result = ${result}, time_spent_sec = ${time_spent_sec ?? null}, answered_at = ${nowText()}
+    WHERE session_id = ${req.params.id} AND question_id = ${req.params.qid}
+    RETURNING id
+  `;
+  if (updated.length === 0) return res.status(404).json({ error: "Not found" });
   res.json({ ok: true });
 });
 
 // POST /api/tests/:id/finish
-testsRouter.post("/:id/finish", (req, res) => {
-  const session: any = db.prepare("SELECT * FROM test_sessions WHERE id = ?").get(req.params.id);
+testsRouter.post("/:id/finish", async (req, res) => {
+  const [session] = await sql`SELECT * FROM test_sessions WHERE id = ${req.params.id}`;
   if (!session) return res.status(404).json({ error: "Not found" });
 
-  db.prepare("UPDATE test_sessions SET ended_at = datetime('now') WHERE id = ?").run(req.params.id);
-  res.json(buildResults(req.params.id));
+  await sql`UPDATE test_sessions SET ended_at = ${nowText()} WHERE id = ${req.params.id}`;
+  res.json(await buildResults(req.params.id));
 });
 
 // GET /api/tests/:id
-testsRouter.get("/:id", (req, res) => {
-  const session = db.prepare("SELECT * FROM test_sessions WHERE id = ?").get(req.params.id);
+testsRouter.get("/:id", async (req, res) => {
+  const [session] = await sql`SELECT * FROM test_sessions WHERE id = ${req.params.id}`;
   if (!session) return res.status(404).json({ error: "Not found" });
-  res.json(buildResults(req.params.id));
+  res.json(await buildResults(req.params.id));
 });
 
 // DELETE /api/tests/:id
-testsRouter.delete("/:id", (req, res) => {
-  const info = db.prepare("DELETE FROM test_sessions WHERE id = ?").run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: "Not found" });
+testsRouter.delete("/:id", async (req, res) => {
+  const deleted = await sql`DELETE FROM test_sessions WHERE id = ${req.params.id} RETURNING id`;
+  if (deleted.length === 0) return res.status(404).json({ error: "Not found" });
   res.status(204).end();
 });
 
-function buildResults(sessionId: string) {
-  const session: any = db.prepare("SELECT * FROM test_sessions WHERE id = ?").get(sessionId);
-  const rows = db
-    .prepare(
-      `SELECT tsq.*, q.number, q.title, q.difficulty, q.topics, q.leetcode_url
-       FROM test_session_questions tsq
-       JOIN questions q ON q.id = tsq.question_id
-       WHERE tsq.session_id = ?
-       ORDER BY tsq.order_index ASC`
-    )
-    .all(sessionId) as any[];
+async function buildResults(sessionId: string | number) {
+  const [session] = await sql`SELECT * FROM test_sessions WHERE id = ${sessionId}`;
+  const rows = await sql`
+    SELECT tsq.*, q.number, q.title, q.difficulty, q.topics, q.leetcode_url
+    FROM test_session_questions tsq
+    JOIN questions q ON q.id = tsq.question_id
+    WHERE tsq.session_id = ${sessionId}
+    ORDER BY tsq.order_index ASC
+  `;
 
-  const items = rows.map((r) => ({ ...r, topics: JSON.parse(r.topics ?? "[]") }));
+  const items = (rows as any[]).map((r) => ({ ...r, topics: JSON.parse(r.topics ?? "[]") }));
 
   const answered = items.filter((i) => i.result);
   const correct = items.filter((i) => i.result === "correct");
@@ -156,6 +160,15 @@ function buildResults(sessionId: string) {
   return {
     session,
     items,
-    summary: { score, accuracy, totalQuestions: items.length, answeredCount: answered.length, correctCount: correct.length, avgTimeSec, byTopic, byDifficulty },
+    summary: {
+      score,
+      accuracy,
+      totalQuestions: items.length,
+      answeredCount: answered.length,
+      correctCount: correct.length,
+      avgTimeSec,
+      byTopic,
+      byDifficulty,
+    },
   };
 }

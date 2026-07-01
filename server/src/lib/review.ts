@@ -1,27 +1,41 @@
-export const MILESTONES_DAYS = [7, 10, 15, 30];
+/** Regular review checkpoints, as a day-of-month. Stage 4+ is the monthly test (big test) checkpoint. */
+export const CHECKPOINT_DAYS = [5, 10, 15, 20];
+export const MONTHLY_TEST_DAY = 30;
 
-export type Bucket = "7" | "10" | "15" | "30" | "maintenance";
+export type Bucket = "5" | "10" | "15" | "20" | "monthly-test";
 
 export function daysBetween(a: Date, b: Date): number {
   const ms = b.getTime() - a.getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+/** The next date, strictly after `from`, that falls on `targetDay` of its month (clamped to short months). */
+function nextCalendarCheckpoint(from: Date, targetDay: number): Date {
+  const year = from.getFullYear();
+  const month = from.getMonth();
+
+  const clampedThisMonth = Math.min(targetDay, lastDayOfMonth(year, month));
+  const candidate = new Date(year, month, clampedThisMonth);
+  if (candidate.getTime() > from.getTime()) return candidate;
+
+  const clampedNextMonth = Math.min(targetDay, lastDayOfMonth(year, month + 1));
+  return new Date(year, month + 1, clampedNextMonth);
+}
+
 /**
  * Given the last attempt date and how many reviews have happened since,
- * compute the bucket this question belongs to and its next due date.
+ * compute the calendar checkpoint bucket this question belongs to and its next due date.
  */
 export function computeSchedule(lastAttemptDate: Date, stage: number, now: Date = new Date()) {
-  const cappedStage = Math.min(stage, MILESTONES_DAYS.length - 1);
-  const intervalDays =
-    stage < MILESTONES_DAYS.length ? MILESTONES_DAYS[stage] : MILESTONES_DAYS[MILESTONES_DAYS.length - 1];
+  const isMonthlyTest = stage >= CHECKPOINT_DAYS.length;
+  const targetDay = isMonthlyTest ? MONTHLY_TEST_DAY : CHECKPOINT_DAYS[stage];
+  const bucket: Bucket = isMonthlyTest ? "monthly-test" : (String(targetDay) as Bucket);
 
-  const nextDue = new Date(lastAttemptDate);
-  nextDue.setDate(nextDue.getDate() + intervalDays);
-
-  const bucket: Bucket =
-    stage < MILESTONES_DAYS.length ? (String(MILESTONES_DAYS[cappedStage]) as Bucket) : "maintenance";
-
+  const nextDue = nextCalendarCheckpoint(lastAttemptDate, targetDay);
   const daysOverdue = daysBetween(nextDue, now);
 
   return {
@@ -43,8 +57,8 @@ export type AttemptLite = { date: string; confidence: number };
 
 /**
  * Replays a question's attempt history to find its current review stage and schedule.
- * The first attempt always seeds stage 0 (review again in 7 days); each attempt after
- * that uses its self-reported confidence to adjust the stage for the next interval.
+ * The first attempt always seeds stage 0 (next checkpoint: the 5th); each attempt after
+ * that uses its self-reported confidence to adjust the stage for the next checkpoint.
  */
 export function computeQuestionState(attempts: AttemptLite[], now: Date = new Date()) {
   const sorted = [...attempts].sort((a, b) => a.date.localeCompare(b.date));
