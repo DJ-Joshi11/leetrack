@@ -52,12 +52,17 @@ const BUCKET_LABELS: Record<string, string> = {
 }
 
 const CHECKPOINT_ORDER: Array<keyof ActivityTracker['byCheckpoint']> = ['5', '10', '15', '20', 'monthly-test']
-const CHECKPOINT_SHORT_LABELS: Record<string, string> = {
-  '5': '5th',
-  '10': '10th',
-  '15': '15th',
-  '20': '20th',
-  'monthly-test': 'Monthly test',
+const CHECKPOINT_DAY: Record<string, number> = { '5': 5, '10': 10, '15': 15, '20': 20, 'monthly-test': 30 }
+
+/** The next calendar occurrence of `targetDay`, on or after today — matches the server's checkpoint logic. */
+function upcomingCheckpointDate(targetDay: number, today: Date = new Date()): Date {
+  const year = today.getFullYear()
+  const month = today.getMonth()
+  const lastDayThisMonth = new Date(year, month + 1, 0).getDate()
+  const clampedThisMonth = Math.min(targetDay, lastDayThisMonth)
+  if (clampedThisMonth >= today.getDate()) return new Date(year, month, clampedThisMonth)
+  const lastDayNextMonth = new Date(year, month + 2, 0).getDate()
+  return new Date(year, month + 1, Math.min(targetDay, lastDayNextMonth))
 }
 
 function SubmissionStat({
@@ -121,17 +126,23 @@ function TimelyTracker() {
           </div>
 
           <div className="mt-4">
-            <div className="mb-2 text-xs uppercase tracking-wide text-(--color-text-faint)">On track</div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-(--color-text-faint)">
+              Upcoming reviews <span className="normal-case text-(--color-text-faint)">— not due yet, just scheduled</span>
+            </div>
             <div className="flex flex-wrap gap-2">
-              {CHECKPOINT_ORDER.map((bucket) => (
-                <div
-                  key={bucket}
-                  className="rounded-full border border-(--color-border) px-3 py-1 text-xs text-(--color-text-dim)"
-                >
-                  {CHECKPOINT_SHORT_LABELS[bucket]}
-                  <span className="ml-1.5 font-mono text-(--color-text)">{tracker.data.byCheckpoint[bucket] ?? 0}</span>
-                </div>
-              ))}
+              {CHECKPOINT_ORDER.map((bucket) => {
+                const count = tracker.data.byCheckpoint[bucket] ?? 0
+                const date = upcomingCheckpointDate(CHECKPOINT_DAY[bucket])
+                return (
+                  <div
+                    key={bucket}
+                    className="rounded-full border border-(--color-border) px-3 py-1 text-xs text-(--color-text-dim)"
+                  >
+                    <span className="font-mono text-(--color-text)">{count}</span> due{' '}
+                    {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </>
