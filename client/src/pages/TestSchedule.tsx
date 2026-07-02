@@ -39,7 +39,7 @@ export default function TestSchedule() {
 
   const itemsThisMonth = useMemo(() => {
     return (schedule.data?.items ?? []).filter((item) => {
-      const d = new Date(item.nextDue)
+      const d = new Date(`${item.nextDue}T00:00:00`)
       return d.getFullYear() === year && d.getMonth() === month
     })
   }, [schedule.data, year, month])
@@ -154,7 +154,7 @@ export default function TestSchedule() {
                           ? item.daysOverdue > 0
                             ? `${item.daysOverdue}d overdue`
                             : 'due now'
-                          : new Date(item.nextDue).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          : new Date(`${item.nextDue}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
                   ))}

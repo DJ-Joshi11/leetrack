@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { sql } from "../lib/db.js";
-import { computeQuestionState } from "../lib/review.js";
+import { computeQuestionState, toLocalDateString } from "../lib/review.js";
 
 export const reviewRouter = Router();
 
@@ -40,8 +40,8 @@ reviewRouter.get("/due", async (_req, res) => {
       difficulty: q.difficulty,
       topics: JSON.parse(q.topics ?? "[]"),
       stage: state.stage,
-      lastAttemptDate: state.lastAttemptDate,
-      nextDue: state.nextDue,
+      lastAttemptDate: toLocalDateString(state.lastAttemptDate),
+      nextDue: toLocalDateString(state.nextDue),
       daysOverdue: state.daysOverdue,
     });
   }
@@ -70,8 +70,8 @@ reviewRouter.get("/schedule", async (_req, res) => {
       topics: JSON.parse(q.topics ?? "[]"),
       stage: state.stage,
       bucket: state.bucket,
-      lastAttemptDate: state.lastAttemptDate,
-      nextDue: state.nextDue,
+      lastAttemptDate: toLocalDateString(state.lastAttemptDate),
+      nextDue: toLocalDateString(state.nextDue),
       isDue: state.isDue,
       daysOverdue: state.daysOverdue,
     });
