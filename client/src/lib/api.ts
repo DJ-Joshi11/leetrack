@@ -26,6 +26,8 @@ export const api = {
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard'
 
+export type SimilarQuestion = { number: number | null; title: string; slug: string; difficulty: string }
+
 export type Question = {
   id: number
   number: number
@@ -37,6 +39,9 @@ export type Question = {
   optimal_time_complexity: string | null
   optimal_space_complexity: string | null
   ai_pattern_summary: string | null
+  acceptance_rate: string | null
+  hints: string[]
+  similar_questions: SimilarQuestion[]
   created_at: string
   attempt_count?: number
   last_attempt_date?: string | null
@@ -96,7 +101,13 @@ export type ActivityTracker = {
   byCheckpoint: Record<MilestoneBucket, number>
 }
 
-export type SyncResult = { synced: number; skipped: number; username: string | null; throttled: boolean }
+export type SyncResult = {
+  synced: number
+  skipped: number
+  username: string | null
+  throttled: boolean
+  lastSyncedAt: string | null
+}
 
 export type ScheduleItem = {
   id: number
@@ -198,6 +209,7 @@ export type TestResultItem = {
   difficulty: Difficulty
   topics: string[]
   leetcode_url: string
+  hints: string[]
 }
 
 export type TestResults = {

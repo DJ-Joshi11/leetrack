@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { sql, nowText } from "../lib/db.js";
-import { computeQuestionState, type Bucket } from "../lib/review.js";
-import { generateMilestoneExam, milestoneTopics, nextMilestoneBucket, toLocalDateString } from "../lib/milestoneExam.js";
+import { computeQuestionState, toLocalDateString, type Bucket } from "../lib/review.js";
+import { generateMilestoneExam, milestoneTopics, nextMilestoneBucket } from "../lib/milestoneExam.js";
 
 export const testsRouter = Router();
 
@@ -153,14 +153,14 @@ testsRouter.delete("/:id", async (req, res) => {
 async function buildResults(sessionId: string | number) {
   const [session] = await sql`SELECT * FROM test_sessions WHERE id = ${sessionId}`;
   const rows = await sql`
-    SELECT tsq.*, q.number, q.title, q.difficulty, q.topics, q.leetcode_url
+    SELECT tsq.*, q.number, q.title, q.difficulty, q.topics, q.leetcode_url, q.hints
     FROM test_session_questions tsq
     JOIN questions q ON q.id = tsq.question_id
     WHERE tsq.session_id = ${sessionId}
     ORDER BY tsq.order_index ASC
   `;
 
-  const items = (rows as any[]).map((r) => ({ ...r, topics: JSON.parse(r.topics ?? "[]") }));
+  const items = (rows as any[]).map((r) => ({ ...r, topics: JSON.parse(r.topics ?? "[]"), hints: JSON.parse(r.hints ?? "[]") }));
 
   const answered = items.filter((i) => i.result);
   const correct = items.filter((i) => i.result === "correct");

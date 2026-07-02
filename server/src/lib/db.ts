@@ -23,10 +23,16 @@ export async function initSchema() {
       optimal_time_complexity TEXT,
       optimal_space_complexity TEXT,
       ai_pattern_summary TEXT,
+      acceptance_rate TEXT,
+      hints TEXT NOT NULL DEFAULT '[]',
+      similar_questions TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT ${sql.unsafe(NOW_TEXT)},
       fetched_at TEXT
     )
   `;
+  await sql`ALTER TABLE questions ADD COLUMN IF NOT EXISTS acceptance_rate TEXT`;
+  await sql`ALTER TABLE questions ADD COLUMN IF NOT EXISTS hints TEXT NOT NULL DEFAULT '[]'`;
+  await sql`ALTER TABLE questions ADD COLUMN IF NOT EXISTS similar_questions TEXT NOT NULL DEFAULT '[]'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS attempts (
@@ -90,5 +96,7 @@ export async function initSchema() {
   `;
 
   await sql`CREATE INDEX IF NOT EXISTS idx_attempts_question_id ON attempts(question_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_attempts_date ON attempts(date)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_tsq_session_id ON test_session_questions(session_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_tsq_question_id ON test_session_questions(question_id)`;
 }

@@ -126,6 +126,25 @@ analysisRouter.post("/generate", async (_req, res) => {
     const plan = await generateAnalysisPlan(snapshot);
     const loggedSet = new Set(loggedNumbers);
 
+    // Prefer LeetCode's own curated "similar questions" for questions already tracked on the
+    // suggested topics — real editorial data beats an LLM guessing at what's related.
+    const realCandidates = new Set<number>();
+    for (const q of questions as any[]) {
+      const qTopics: string[] = JSON.parse(q.topics ?? "[]");
+      if (!qTopics.some((t) => plan.suggestedTopics.includes(t))) continue;
+      let similar: Array<{ number: number | null }> = [];
+      try {
+        similar = JSON.parse(q.similar_questions ?? "[]");
+      } catch {
+        continue;
+      }
+      for (const s of similar) {
+        if (s.number && !loggedSet.has(s.number)) realCandidates.add(s.number);
+      }
+    }
+
+    const candidateNumbers = [...new Set([...realCandidates, ...plan.suggestedQuestionNumbers])].slice(0, 8);
+
     const suggestedQuestions: Array<{
       number: number;
       title: string;
@@ -133,7 +152,7 @@ analysisRouter.post("/generate", async (_req, res) => {
       url: string;
       alreadyLogged: boolean;
     }> = [];
-    for (const num of plan.suggestedQuestionNumbers.slice(0, 8)) {
+    for (const num of candidateNumbers) {
       try {
         const detail = await lookupQuestionByNumber(num);
         suggestedQuestions.push({

@@ -17,10 +17,11 @@ leetcodeRouter.get("/profile", async (req, res) => {
   }
 });
 
-// POST /api/leetcode/sync -> auto-log any new accepted submissions since the last sync (throttled to once/5min)
-leetcodeRouter.post("/sync", async (_req, res) => {
+// POST /api/leetcode/sync { force? } -> auto-log any new accepted submissions since the last sync
+// (throttled to once/5min unless force is set, e.g. from a manual "Sync now" click)
+leetcodeRouter.post("/sync", async (req, res) => {
   try {
-    const result = await syncRecentSubmissions();
+    const result = await syncRecentSubmissions(!!req.body?.force);
     res.json(result);
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });

@@ -10,6 +10,8 @@ function rowToQuestion(row: any) {
   return {
     ...row,
     topics: JSON.parse(row.topics ?? "[]"),
+    hints: JSON.parse(row.hints ?? "[]"),
+    similar_questions: JSON.parse(row.similar_questions ?? "[]"),
   };
 }
 
@@ -35,6 +37,9 @@ questionsRouter.post("/lookup", async (req, res) => {
         optimal_time_complexity: ai.optimalTimeComplexity,
         optimal_space_complexity: ai.optimalSpaceComplexity,
         ai_pattern_summary: ai.patternSummary,
+        acceptance_rate: detail.acceptanceRate,
+        hints: detail.hints,
+        similar_questions: detail.similarQuestions,
       },
     });
   } catch (err) {
@@ -133,7 +138,7 @@ questionsRouter.get("/", async (_req, res) => {
     FROM questions q
     LEFT JOIN attempts a ON a.question_id = q.id
     GROUP BY q.id
-    ORDER BY q.created_at DESC
+    ORDER BY GREATEST(q.created_at, COALESCE(MAX(a.date), q.created_at)) DESC
   `;
   res.json({ questions: rows.map(rowToQuestion) });
 });

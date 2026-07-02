@@ -24,9 +24,9 @@ export async function insertQuestion(
 ) {
   const [row] = await sql`
     INSERT INTO questions
-      (number, title, slug, difficulty, topics, leetcode_url, optimal_time_complexity, optimal_space_complexity, ai_pattern_summary, fetched_at)
+      (number, title, slug, difficulty, topics, leetcode_url, optimal_time_complexity, optimal_space_complexity, ai_pattern_summary, acceptance_rate, hints, similar_questions, fetched_at)
     VALUES
-      (${detail.number}, ${detail.title}, ${detail.slug}, ${detail.difficulty}, ${JSON.stringify(detail.topics)}, ${detail.url}, ${ai.optimalTimeComplexity}, ${ai.optimalSpaceComplexity}, ${ai.patternSummary}, ${nowText()})
+      (${detail.number}, ${detail.title}, ${detail.slug}, ${detail.difficulty}, ${JSON.stringify(detail.topics)}, ${detail.url}, ${ai.optimalTimeComplexity}, ${ai.optimalSpaceComplexity}, ${ai.patternSummary}, ${detail.acceptanceRate}, ${JSON.stringify(detail.hints)}, ${JSON.stringify(detail.similarQuestions)}, ${nowText()})
     RETURNING *
   `;
   return row;

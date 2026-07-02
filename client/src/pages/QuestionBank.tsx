@@ -105,6 +105,9 @@ export default function QuestionBank() {
                       {q.title}
                     </a>
                     <DifficultyBadge difficulty={q.difficulty} />
+                    {q.acceptance_rate && (
+                      <span className="text-xs text-(--color-text-faint)">{q.acceptance_rate} acceptance</span>
+                    )}
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {q.topics.slice(0, 5).map((t) => (

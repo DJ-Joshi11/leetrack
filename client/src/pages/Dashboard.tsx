@@ -95,13 +95,14 @@ function MilestoneExamCard() {
   )
 }
 
-/** Silently syncs recent LeetCode submissions once per Dashboard visit (server-side throttled to 5min). */
+/** Syncs recent LeetCode submissions once per Dashboard visit (server-side throttled to 5min), plus an
+ *  on-demand "Sync now" that bypasses the throttle. */
 function useAutoSync() {
   const queryClient = useQueryClient()
   const firedRef = useRef(false)
 
   const sync = useMutation({
-    mutationFn: () => api.post<SyncResult>('/leetcode/sync'),
+    mutationFn: (force: boolean) => api.post<SyncResult>('/leetcode/sync', { force }),
     onSuccess: (result) => {
       if (result.synced > 0) {
         queryClient.invalidateQueries({ queryKey: ['stats'] })
@@ -115,11 +116,23 @@ function useAutoSync() {
   useEffect(() => {
     if (firedRef.current) return
     firedRef.current = true
-    sync.mutate()
+    sync.mutate(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return sync
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return 'never'
+  const diffSec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  if (diffSec < 10) return 'just now'
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHour = Math.round(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  return `${Math.round(diffHour / 24)}d ago`
 }
 
 const BUCKET_LABELS: Record<string, string> = {
@@ -172,7 +185,6 @@ function SubmissionStat({
 
 function TimelyTracker() {
   const tracker = useQuery({ queryKey: ['stats', 'tracker'], queryFn: () => api.get<ActivityTracker>('/stats/tracker') })
-  const sync = useAutoSync()
 
   return (
     <Card>
@@ -181,14 +193,6 @@ function TimelyTracker() {
           <Clock size={16} className="text-(--color-accent)" />
           Timely tracker
         </h2>
-        {sync.isPending && (
-          <span className="flex items-center gap-1.5 text-xs text-(--color-text-faint)">
-            <RefreshCw size={12} className="animate-spin" /> syncing LeetCode…
-          </span>
-        )}
-        {sync.data && sync.data.synced > 0 && (
-          <span className="text-xs text-(--color-accent)">synced {sync.data.synced} new from LeetCode</span>
-        )}
       </div>
 
       {tracker.isLoading && (
@@ -230,7 +234,7 @@ function TimelyTracker() {
   )
 }
 
-function LeetCodeProfileCard() {
+function LeetCodeProfileCard({ sync }: { sync: ReturnType<typeof useAutoSync> }) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [usernameInput, setUsernameInput] = useState('')
@@ -272,17 +276,35 @@ function LeetCodeProfileCard() {
           Activity
         </h2>
         {username && !showConnectForm && (
-          <button
-            onClick={() => {
-              setUsernameInput(username)
-              setEditing(true)
-            }}
-            className="flex items-center gap-1 text-xs text-(--color-text-faint) hover:text-(--color-text-dim)"
-          >
-            <Pencil size={12} /> {username}
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => {
+                setUsernameInput(username)
+                setEditing(true)
+              }}
+              className="flex items-center gap-1 text-xs text-(--color-text-faint) hover:text-(--color-text-dim)"
+            >
+              <Pencil size={12} /> {username}
+            </button>
+            <div className="flex items-center gap-2 text-xs text-(--color-text-faint)">
+              <span>
+                {sync.isPending ? 'syncing…' : `synced ${timeAgo(sync.data?.lastSyncedAt ?? null)}`}
+              </span>
+              <button
+                onClick={() => sync.mutate(true)}
+                disabled={sync.isPending}
+                className="flex items-center gap-1 text-(--color-accent) hover:text-(--color-accent)/80 disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={sync.isPending ? 'animate-spin' : ''} /> Sync now
+              </button>
+            </div>
+          </div>
         )}
       </div>
+      {sync.isSuccess && sync.data.synced > 0 && (
+        <p className="mt-1 text-xs text-(--color-accent)">synced {sync.data.synced} new from LeetCode</p>
+      )}
+      {sync.isError && <p className="mt-1 text-xs text-(--color-hard)">{(sync.error as Error).message}</p>}
 
       {showConnectForm && (
         <div className="mt-3 flex gap-2">
@@ -349,6 +371,7 @@ function LeetCodeProfileCard() {
 
 export default function Dashboard() {
   const queryClient = useQueryClient()
+  const sync = useAutoSync()
   const overview = useQuery({ queryKey: ['stats', 'overview'], queryFn: () => api.get<Overview>('/stats/overview') })
   const due = useQuery({ queryKey: ['review', 'due'], queryFn: () => api.get<DueResponse>('/review/due') })
   const insights = useQuery({
@@ -387,9 +410,9 @@ export default function Dashboard() {
         />
       </div>
 
-      <TimelyTracker />
+      <LeetCodeProfileCard sync={sync} />
 
-      <LeetCodeProfileCard />
+      <TimelyTracker />
 
       <Card>
         <div className="flex items-center justify-between">

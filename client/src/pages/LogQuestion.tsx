@@ -129,7 +129,7 @@ export default function LogQuestion() {
             ))}
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+          <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
             <div>
               <div className="text-xs text-(--color-text-faint)">Optimal time</div>
               <div className="font-mono">{submit.data.question.optimal_time_complexity}</div>
@@ -138,10 +138,32 @@ export default function LogQuestion() {
               <div className="text-xs text-(--color-text-faint)">Optimal space</div>
               <div className="font-mono">{submit.data.question.optimal_space_complexity}</div>
             </div>
+            {submit.data.question.acceptance_rate && (
+              <div>
+                <div className="text-xs text-(--color-text-faint)">Acceptance rate</div>
+                <div className="font-mono">{submit.data.question.acceptance_rate}</div>
+              </div>
+            )}
           </div>
 
           {submit.data.question.ai_pattern_summary && (
             <p className="mt-3 text-sm text-(--color-text-dim)">{submit.data.question.ai_pattern_summary}</p>
+          )}
+
+          {submit.data.question.similar_questions.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-xs uppercase tracking-wide text-(--color-text-faint)">Related questions</div>
+              <div className="flex flex-wrap gap-1.5">
+                {submit.data.question.similar_questions.slice(0, 6).map((s) => (
+                  <span
+                    key={s.slug}
+                    className="rounded-md border border-(--color-border) bg-(--color-surface-2) px-2 py-0.5 text-xs text-(--color-text-dim)"
+                  >
+                    {s.title}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
 
           {submit.data.attempt.ai_code_analysis && (

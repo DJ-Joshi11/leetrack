@@ -46,10 +46,12 @@ async function loadProblemList(): Promise<Map<number, ProblemListEntry>> {
   return map;
 }
 
-async function lookupNumberBySlug(slug: string): Promise<number | null> {
+export async function lookupNumberBySlug(slug: string): Promise<number | null> {
   await loadProblemList();
   return slugToNumberCache?.get(slug) ?? null;
 }
+
+export type SimilarQuestion = { number: number | null; title: string; slug: string; difficulty: string };
 
 export type LeetCodeQuestionDetail = {
   number: number;
@@ -59,6 +61,9 @@ export type LeetCodeQuestionDetail = {
   topics: string[];
   url: string;
   content: string;
+  acceptanceRate: string | null;
+  hints: string[];
+  similarQuestions: SimilarQuestion[];
 };
 
 export async function lookupQuestionByNumber(number: number): Promise<LeetCodeQuestionDetail> {
@@ -75,6 +80,9 @@ export async function lookupQuestionByNumber(number: number): Promise<LeetCodeQu
         difficulty
         content
         topicTags { name }
+        stats
+        hints
+        similarQuestions
       }
     }
   `;
@@ -93,6 +101,29 @@ export async function lookupQuestionByNumber(number: number): Promise<LeetCodeQu
   const q = json.data?.question;
   if (!q) throw new Error(`LeetCode GraphQL returned no data for ${entry.slug}`);
 
+  let acceptanceRate: string | null = null;
+  try {
+    const stats = JSON.parse(q.stats ?? "{}");
+    acceptanceRate = stats.acRate ?? null;
+  } catch {
+    // malformed stats payload — leave acceptanceRate null
+  }
+
+  let rawSimilar: Array<{ title: string; titleSlug: string; difficulty: string }> = [];
+  try {
+    rawSimilar = JSON.parse(q.similarQuestions ?? "[]");
+  } catch {
+    // malformed similarQuestions payload — leave empty
+  }
+  const similarQuestions: SimilarQuestion[] = await Promise.all(
+    rawSimilar.map(async (s) => ({
+      number: await lookupNumberBySlug(s.titleSlug),
+      title: s.title,
+      slug: s.titleSlug,
+      difficulty: s.difficulty,
+    }))
+  );
+
   return {
     number,
     title: q.title,
@@ -101,6 +132,9 @@ export async function lookupQuestionByNumber(number: number): Promise<LeetCodeQu
     topics: (q.topicTags ?? []).map((t: { name: string }) => t.name),
     url: `https://leetcode.com/problems/${entry.slug}/`,
     content: stripHtml(q.content ?? ""),
+    acceptanceRate,
+    hints: Array.isArray(q.hints) ? q.hints.map((h: string) => stripHtml(h)) : [],
+    similarQuestions,
   };
 }
 
@@ -113,8 +147,17 @@ export type LeetCodeProfile = {
   recentSubmissions: Array<{ number: number | null; title: string; slug: string; date: string }>;
 };
 
+// LeetCode timestamps are UTC instants. This app is scoped to a single IST user, so submission
+// dates are resolved to the IST calendar day explicitly — otherwise anything solved between
+// midnight and 5:30am IST would land on the wrong (previous) day once deployed on a UTC server.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function toIstDateString(date: Date): string {
+  return new Date(date.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 function unixDayToIso(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
+  return toIstDateString(new Date(unixSeconds * 1000));
 }
 
 export async function fetchUserProfile(username: string): Promise<LeetCodeProfile> {
@@ -169,8 +212,9 @@ export async function fetchUserProfile(username: string): Promise<LeetCodeProfil
 
   const trailingDays = 365;
   const calendar: Array<{ date: string; count: number }> = [];
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
   for (let i = trailingDays - 1; i >= 0; i--) {
-    const d = new Date(now);
+    const d = new Date(istNow);
     d.setUTCDate(d.getUTCDate() - i);
     const iso = d.toISOString().slice(0, 10);
     calendar.push({ date: iso, count: calendarMap.get(iso) ?? 0 });

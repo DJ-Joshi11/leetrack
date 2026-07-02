@@ -1,7 +1,7 @@
 import { sql } from "./db.js";
 import { findOrCreateQuestion } from "./enrichment.js";
 import { generateSimilarQuestionNumbers } from "./llm.js";
-import { CHECKPOINT_DAYS, MONTHLY_TEST_DAY, lastDayOfMonth, type Bucket } from "./review.js";
+import { CHECKPOINT_DAYS, MONTHLY_TEST_DAY, lastDayOfMonth, toLocalDateString, type Bucket } from "./review.js";
 
 const CHECKPOINT_DAY: Record<Bucket, number> = {
   "5": CHECKPOINT_DAYS[0],
@@ -23,12 +23,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function fmtDate(year: number, month: number, day: number): string {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-/** Local YYYY-MM-DD — NOT toISOString(), which shifts the date across UTC timezone boundaries. */
-export function toLocalDateString(d: Date): string {
-  return fmtDate(d.getFullYear(), d.getMonth(), d.getDate());
+  return toLocalDateString(new Date(year, month, day));
 }
 
 /** The next calendar occurrence of `targetDay`, on or after `today`. */
@@ -142,25 +137,48 @@ export async function generateMilestoneExam(bucket: Bucket) {
   }
 
   const targetSize = EXAM_SIZE[bucket];
-  const trackedNumbers = (await sql`SELECT number FROM questions`).map((r: any) => r.number as number);
+  const trackedNumbers = new Set((await sql`SELECT number FROM questions`).map((r: any) => r.number as number));
+  const wantSupplemental = Math.max(4, Math.ceil(targetSize / 2));
 
-  try {
-    const suggestedNumbers = await generateSimilarQuestionNumbers({
-      topics,
-      count: Math.max(4, Math.ceil(targetSize / 2)),
-      excludeNumbers: trackedNumbers,
-    });
-    for (const num of suggestedNumbers) {
-      try {
-        const q = await findOrCreateQuestion(num);
-        poolMap.set(q.id, q);
-      } catch (err) {
-        console.warn(`Milestone exam: couldn't add suggested #${num}:`, (err as Error).message);
-      }
-      await new Promise((r) => setTimeout(r, 200));
+  // Prefer LeetCode's own curated "similar questions" for each question already in the pool —
+  // real editorial data beats an LLM guessing at what's related.
+  const realCandidates = new Set<number>();
+  for (const q of poolMap.values()) {
+    let similar: Array<{ number: number | null }> = [];
+    try {
+      similar = JSON.parse(q.similar_questions ?? "[]");
+    } catch {
+      continue;
     }
-  } catch (err) {
-    console.warn("Milestone exam: AI suggestion failed, using tracked questions only:", (err as Error).message);
+    for (const s of similar) {
+      if (s.number && !trackedNumbers.has(s.number)) realCandidates.add(s.number);
+    }
+  }
+
+  const candidateNumbers = [...realCandidates].slice(0, wantSupplemental);
+
+  // Only ask the LLM to fill whatever gap real curated data couldn't cover.
+  if (candidateNumbers.length < wantSupplemental) {
+    try {
+      const suggestedNumbers = await generateSimilarQuestionNumbers({
+        topics,
+        count: wantSupplemental - candidateNumbers.length,
+        excludeNumbers: [...trackedNumbers, ...candidateNumbers],
+      });
+      candidateNumbers.push(...suggestedNumbers);
+    } catch (err) {
+      console.warn("Milestone exam: AI suggestion failed, using curated + tracked questions only:", (err as Error).message);
+    }
+  }
+
+  for (const num of candidateNumbers) {
+    try {
+      const q = await findOrCreateQuestion(num);
+      poolMap.set(q.id, q);
+    } catch (err) {
+      console.warn(`Milestone exam: couldn't add candidate #${num}:`, (err as Error).message);
+    }
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   const combined = [...poolMap.values()];

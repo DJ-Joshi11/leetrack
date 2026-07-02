@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ExternalLink, ListChecks, Timer as TimerIcon, MousePointerClick } from 'lucide-react'
+import { ExternalLink, ListChecks, Timer as TimerIcon, MousePointerClick, Lightbulb } from 'lucide-react'
 import { api, type TestResults } from '../lib/api'
 import { Button, Card, DifficultyBadge, Spinner, TopicTag } from '../components/ui'
 
@@ -28,6 +28,7 @@ export default function TestRunner() {
   const [index, setIndex] = useState(0)
   const [questionElapsed, setQuestionElapsed] = useState(0)
   const [totalElapsed, setTotalElapsed] = useState(0)
+  const [hintsShown, setHintsShown] = useState(0)
 
   useEffect(() => {
     if (!started) return
@@ -40,6 +41,7 @@ export default function TestRunner() {
 
   useEffect(() => {
     setQuestionElapsed(0)
+    setHintsShown(0)
   }, [index])
 
   const config = useMemo(() => (session.data ? JSON.parse(session.data.session.config) : {}), [session.data])
@@ -150,14 +152,34 @@ export default function TestRunner() {
           ))}
         </div>
 
-        <a
-          href={current.leetcode_url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-(--color-accent)/40 px-3 py-1.5 text-sm text-(--color-accent) transition-colors hover:bg-(--color-accent)/10"
-        >
-          <ExternalLink size={14} /> Open on LeetCode
-        </a>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <a
+            href={current.leetcode_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-(--color-accent)/40 px-3 py-1.5 text-sm text-(--color-accent) transition-colors hover:bg-(--color-accent)/10"
+          >
+            <ExternalLink size={14} /> Open on LeetCode
+          </a>
+          {current.hints.length > 0 && hintsShown < current.hints.length && (
+            <button
+              onClick={() => setHintsShown((n) => n + 1)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-(--color-border) px-3 py-1.5 text-sm text-(--color-text-dim) transition-colors hover:border-(--color-text-faint)"
+            >
+              <Lightbulb size={14} /> {hintsShown === 0 ? 'Show a hint' : 'Show another hint'}
+            </button>
+          )}
+        </div>
+
+        {hintsShown > 0 && (
+          <div className="mx-auto mt-3 max-w-lg space-y-2 text-left">
+            {current.hints.slice(0, hintsShown).map((hint, i) => (
+              <p key={i} className="rounded-lg border border-(--color-border) bg-(--color-surface-2) px-3 py-2 text-xs text-(--color-text-dim)">
+                <span className="font-mono text-(--color-text-faint)">Hint {i + 1}:</span> {hint}
+              </p>
+            ))}
+          </div>
+        )}
 
         <div className="mt-10 flex justify-center gap-3">
           {RESULT_OPTIONS.map((opt) => (
