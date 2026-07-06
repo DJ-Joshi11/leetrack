@@ -59,20 +59,22 @@ statsRouter.get("/activity", async (_req, res) => {
   res.json({ calendar });
 });
 
-function localTodayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// "Today"/"this month" are bucketed on the same UTC day boundary LeetCode itself uses (see
+// unixDayToIso in lib/leetcode.ts) so a submission counts as "today" here exactly when LeetCode
+// would also call it today — regardless of what timezone this server process happens to run in.
+function utcTodayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function localYearMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function utcYearMonth(): string {
+  return new Date().toISOString().slice(0, 7);
 }
 
-// GET /api/stats/tracker -> today/this-month submission counts (new vs revised) + checkpoint distribution
+// GET /api/stats/tracker -> simple today/this-month counts, split into first-ever solves ("new")
+// vs questions solved before ("repeated") — regardless of whether the entry was auto-synced or
+// manually backlogged, since that distinction isn't meaningful to the user here.
 statsRouter.get("/tracker", async (_req, res) => {
   const attempts = await sql`SELECT * FROM attempts ORDER BY date ASC`;
-  const questions = await sql`SELECT * FROM questions`;
 
   const byQuestion = new Map<number, any[]>();
   for (const a of attempts) {
@@ -86,17 +88,14 @@ statsRouter.get("/tracker", async (_req, res) => {
     firstAttemptDate.set(qid, sorted[0].date);
   }
 
-  const today = localTodayIso();
-  const yearMonth = localYearMonth();
+  const today = utcTodayIso();
+  const yearMonth = utcYearMonth();
 
-  const todayCounts = { total: 0, new: 0, revised: 0, backlog: 0 };
-  const monthCounts = { total: 0, new: 0, revised: 0, backlog: 0 };
+  const todayCounts = { total: 0, new: 0, repeated: 0 };
+  const monthCounts = { total: 0, new: 0, repeated: 0 };
 
   for (const a of attempts) {
-    const isFirst = firstAttemptDate.get(a.question_id) === a.date;
-    // Auto-synced attempts reflect real-time LeetCode activity, so they drive "new"/"revised".
-    // Manually-logged attempts (Log page, bulk import) are backlog catch-up, not session activity.
-    const bucket: "new" | "revised" | "backlog" = a.source !== "auto" ? "backlog" : isFirst ? "new" : "revised";
+    const bucket: "new" | "repeated" = firstAttemptDate.get(a.question_id) === a.date ? "new" : "repeated";
 
     if (a.date === today) {
       todayCounts.total++;
@@ -108,19 +107,7 @@ statsRouter.get("/tracker", async (_req, res) => {
     }
   }
 
-  const byCheckpoint: Record<string, number> = { "5": 0, "10": 0, "15": 0, "20": 0, "monthly-test": 0 };
-  for (const q of questions) {
-    const qAttempts = byQuestion.get(q.id) ?? [];
-    if (!qAttempts.length) continue;
-    const state = computeQuestionState(qAttempts.map((a) => ({ date: a.date, confidence: a.confidence })));
-    byCheckpoint[state.bucket] = (byCheckpoint[state.bucket] ?? 0) + 1;
-  }
-
-  res.json({
-    today: todayCounts,
-    thisMonth: monthCounts,
-    byCheckpoint,
-  });
+  res.json({ today: todayCounts, thisMonth: monthCounts });
 });
 
 // GET /api/stats/weak-topics -> accuracy aggregated by topic from test history

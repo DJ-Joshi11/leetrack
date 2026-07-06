@@ -1,35 +1,60 @@
 import { Router } from "express";
 import { sql, nowText } from "../lib/db.js";
 import { computeQuestionState, toLocalDateString, type Bucket } from "../lib/review.js";
-import { generateMilestoneExam, milestoneTopics, nextMilestoneBucket } from "../lib/milestoneExam.js";
+import { countMilestoneAttempts, generateMilestoneExam, milestoneTopics, nextMilestoneBucket } from "../lib/milestoneExam.js";
+import { generateReviseLatestTest, latestTopics } from "../lib/reviseLatest.js";
 
 export const testsRouter = Router();
 
 const VALID_BUCKETS: Bucket[] = ["5", "10", "15", "20", "monthly-test"];
 
-// GET /api/tests/milestone/next -> which milestone is coming up, its due date, and what topics it'll cover
+// GET /api/tests/milestone/next -> which milestone is coming up, its due date, what topics it'll
+// cover, and how many times it's already been attempted (so the UI can offer a retake instead of
+// implying it's never been started).
 testsRouter.get("/milestone/next", async (_req, res) => {
   const bucket = nextMilestoneBucket();
   const { resolvedDate, topics, poolMap, usedFallback } = await milestoneTopics(bucket);
+  const dueDate = toLocalDateString(resolvedDate);
+  const attemptsSoFar = await countMilestoneAttempts(bucket, dueDate);
   res.json({
     bucket,
-    dueDate: toLocalDateString(resolvedDate),
+    dueDate,
     topics,
     poolSize: poolMap.size,
     usedFallback,
+    attemptsSoFar,
   });
 });
 
-// POST /api/tests/milestone/generate { bucket } -> builds and returns a Milestone Exam test session
+// POST /api/tests/milestone/generate { bucket, count? } -> builds and returns a Milestone Exam
+// test session. `count` is an optional target question count (clamped server-side); omit it to
+// use the bucket's default size.
 testsRouter.post("/milestone/generate", async (req, res) => {
   const bucket = req.body.bucket as Bucket;
   if (!VALID_BUCKETS.includes(bucket)) return res.status(400).json({ error: "Invalid milestone bucket" });
+  const count = Number.isInteger(req.body.count) ? (req.body.count as number) : undefined;
 
   try {
-    const result = await generateMilestoneExam(bucket);
+    const result = await generateMilestoneExam(bucket, count);
     res.status(201).json(result);
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/tests/revise-latest/preview -> the top topics from the last few days of activity
+testsRouter.get("/revise-latest/preview", async (_req, res) => {
+  const result = await latestTopics();
+  res.json(result);
+});
+
+// POST /api/tests/revise-latest/generate -> builds a short test scoped to those latest topics
+testsRouter.post("/revise-latest/generate", async (_req, res) => {
+  try {
+    const result = await generateReviseLatestTest();
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
   }
 });
 

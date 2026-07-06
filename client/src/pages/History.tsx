@@ -57,7 +57,9 @@ export default function History() {
         <Card className="p-0">
           <div className="divide-y divide-(--color-border)">
             {sessions.data.sessions.map((s) => {
-              const isMilestone = JSON.parse(s.config || '{}').source === 'milestone'
+              const cfg = JSON.parse(s.config || '{}')
+              const isMilestone = cfg.source === 'milestone'
+              const isReviseLatest = cfg.source === 'revise-latest'
               return (
               <div
                 key={s.id}
@@ -69,7 +71,12 @@ export default function History() {
                     {new Date(s.started_at).toLocaleString()}
                     {isMilestone && (
                       <span className="flex items-center gap-1 rounded-full border border-(--color-gold)/30 px-2 py-0.5 text-[10px] font-medium text-(--color-gold)">
-                        <Award size={10} /> Milestone
+                        <Award size={10} /> Milestone{cfg.iteration > 1 ? ` #${cfg.iteration}` : ''}
+                      </span>
+                    )}
+                    {isReviseLatest && (
+                      <span className="rounded-full border border-(--color-accent)/30 px-2 py-0.5 text-[10px] font-medium text-(--color-accent)">
+                        Revise
                       </span>
                     )}
                   </div>

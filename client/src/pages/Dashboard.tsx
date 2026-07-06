@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
-import { Flame, ListChecks, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock, RefreshCw, Award } from 'lucide-react'
+import { Flame, CalendarClock, Sparkles, CheckCircle2, Pencil, Clock, RefreshCw, Award, Repeat } from 'lucide-react'
 import {
   api,
   type DueResponse,
-  type Overview,
   type InsightsReport,
   type LeetCodeProfile,
   type ActivityDay,
@@ -14,9 +13,10 @@ import {
   type SyncResult,
   type MilestoneNext,
   type MilestoneBucket,
+  type RevisePreview,
   type TestSession,
 } from '../lib/api'
-import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, StatTile, TopicTag } from '../components/ui'
+import { Button, Card, DifficultyBadge, EmptyState, Input, Spinner, TopicTag } from '../components/ui'
 import { Heatmap } from '../components/Heatmap'
 
 const MILESTONE_EXAM_LABEL: Record<MilestoneBucket, string> = {
@@ -27,15 +27,33 @@ const MILESTONE_EXAM_LABEL: Record<MilestoneBucket, string> = {
   'monthly-test': 'Monthly Milestone Exam',
 }
 
+// Question-count options offered for any Milestone Exam — the server clamps to whatever pool is
+// actually available, this just sets the target.
+const RANGE_OPTIONS = [
+  { label: '5–10', count: 10 },
+  { label: '10–15', count: 15 },
+  { label: '15–20', count: 20 },
+  { label: '20–25', count: 25 },
+]
+const DEFAULT_RANGE_INDEX: Record<MilestoneBucket, number> = {
+  '5': 0,
+  '10': 1,
+  '15': 1,
+  '20': 2,
+  'monthly-test': 3,
+}
+
 function MilestoneExamCard() {
   const navigate = useNavigate()
   const next = useQuery({
     queryKey: ['tests', 'milestone', 'next'],
     queryFn: () => api.get<MilestoneNext>('/tests/milestone/next'),
   })
+  const [rangeIdx, setRangeIdx] = useState<number | null>(null)
 
   const generate = useMutation({
-    mutationFn: (bucket: MilestoneBucket) => api.post<{ session: TestSession }>('/tests/milestone/generate', { bucket }),
+    mutationFn: (vars: { bucket: MilestoneBucket; count: number }) =>
+      api.post<{ session: TestSession }>('/tests/milestone/generate', vars),
     onSuccess: (data) => navigate(`/test/${data.session.id}`),
   })
 
@@ -53,6 +71,8 @@ function MilestoneExamCard() {
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
   const daysUntil = Math.round((dueDate.getTime() - startOfToday.getTime()) / 86_400_000)
+  const attemptsSoFar = next.data.attemptsSoFar
+  const activeRangeIdx = rangeIdx ?? DEFAULT_RANGE_INDEX[next.data.bucket]
 
   return (
     <Card className="border-(--color-gold)/25 shadow-[0_0_30px_-12px_color-mix(in_srgb,var(--color-gold)_60%,transparent)]">
@@ -69,8 +89,14 @@ function MilestoneExamCard() {
       <p className="mt-2 text-sm text-(--color-text-dim)">
         {MILESTONE_EXAM_LABEL[next.data.bucket]} —{' '}
         {dueDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-        {next.data.bucket === 'monthly-test' && ' · covers everything practiced this month'}
+        {next.data.bucket === 'monthly-test' && ' · covers everything practiced this month · hardest of the month'}
       </p>
+
+      {attemptsSoFar > 0 && (
+        <p className="mt-1.5 text-xs text-(--color-text-faint)">
+          Already attempted {attemptsSoFar} time{attemptsSoFar === 1 ? '' : 's'} for this checkpoint.
+        </p>
+      )}
 
       {next.data.topics.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -80,15 +106,110 @@ function MilestoneExamCard() {
         </div>
       )}
 
-      <Button className="mt-4" onClick={() => generate.mutate(next.data!.bucket)} disabled={generate.isPending}>
+      <div className="mt-4">
+        <div className="mb-1.5 text-xs text-(--color-text-faint)">Questions</div>
+        <div className="flex flex-wrap gap-1.5">
+          {RANGE_OPTIONS.map((opt, idx) => (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => setRangeIdx(idx)}
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                idx === activeRangeIdx
+                  ? 'border-(--color-gold) text-(--color-gold)'
+                  : 'border-(--color-border) text-(--color-text-dim) hover:border-(--color-text-faint)'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Button
+        className="mt-4"
+        onClick={() => generate.mutate({ bucket: next.data!.bucket, count: RANGE_OPTIONS[activeRangeIdx].count })}
+        disabled={generate.isPending}
+      >
         {generate.isPending ? (
           <>
             <Spinner /> Building your exam…
           </>
+        ) : attemptsSoFar > 0 ? (
+          `Retake — attempt ${attemptsSoFar + 1}`
         ) : (
           'Start Milestone Exam'
         )}
       </Button>
+
+      {generate.isError && <p className="mt-2 text-sm text-(--color-hard)">{(generate.error as Error).message}</p>}
+    </Card>
+  )
+}
+
+function ReviseLatestCard() {
+  const navigate = useNavigate()
+  const preview = useQuery({
+    queryKey: ['tests', 'revise-latest', 'preview'],
+    queryFn: () => api.get<RevisePreview>('/tests/revise-latest/preview'),
+  })
+
+  const generate = useMutation({
+    mutationFn: () => api.post<{ session: TestSession }>('/tests/revise-latest/generate'),
+    onSuccess: (data) => navigate(`/test/${data.session.id}`),
+  })
+
+  if (preview.isLoading || !preview.data) {
+    return (
+      <Card className="border-(--color-accent)/25">
+        <div className="flex items-center gap-2 text-sm text-(--color-text-dim)">
+          <Spinner /> Loading today's revision…
+        </div>
+      </Card>
+    )
+  }
+
+  const { topics } = preview.data
+
+  return (
+    <Card className="border-(--color-accent)/25 shadow-[0_0_30px_-12px_color-mix(in_srgb,var(--color-accent)_50%,transparent)]">
+      <h2 className="flex items-center gap-2 font-medium">
+        <Repeat size={17} className="text-(--color-accent)" />
+        Revise latest topics
+      </h2>
+
+      {topics.length === 0 ? (
+        <p className="mt-2 text-sm text-(--color-text-dim)">
+          Solve a couple of questions over the next few days and this'll build a quick revision test from what you've
+          been practicing.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-(--color-text-dim)">
+            Currently practicing, from the last few days:
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {topics.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center rounded-md border border-(--color-accent)/30 bg-(--color-accent)/10 px-2.5 py-1 text-xs font-medium text-(--color-accent)"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+
+          <Button className="mt-4" onClick={() => generate.mutate()} disabled={generate.isPending}>
+            {generate.isPending ? (
+              <>
+                <Spinner /> Building…
+              </>
+            ) : (
+              'Start revision test'
+            )}
+          </Button>
+        </>
+      )}
 
       {generate.isError && <p className="mt-2 text-sm text-(--color-hard)">{(generate.error as Error).message}</p>}
     </Card>
@@ -143,27 +264,7 @@ const BUCKET_LABELS: Record<string, string> = {
   'monthly-test': 'Monthly Milestone Exam (covers the full month)',
 }
 
-const CHECKPOINT_ORDER: Array<keyof ActivityTracker['byCheckpoint']> = ['5', '10', '15', '20', 'monthly-test']
-const CHECKPOINT_DAY: Record<string, number> = { '5': 5, '10': 10, '15': 15, '20': 20, 'monthly-test': 30 }
-
-/** The next calendar occurrence of `targetDay`, on or after today — matches the server's checkpoint logic. */
-function upcomingCheckpointDate(targetDay: number, today: Date = new Date()): Date {
-  const year = today.getFullYear()
-  const month = today.getMonth()
-  const lastDayThisMonth = new Date(year, month + 1, 0).getDate()
-  const clampedThisMonth = Math.min(targetDay, lastDayThisMonth)
-  if (clampedThisMonth >= today.getDate()) return new Date(year, month, clampedThisMonth)
-  const lastDayNextMonth = new Date(year, month + 2, 0).getDate()
-  return new Date(year, month + 1, Math.min(targetDay, lastDayNextMonth))
-}
-
-function SubmissionStat({
-  label,
-  counts,
-}: {
-  label: string
-  counts: { total: number; new: number; revised: number; backlog: number }
-}) {
+function SubmissionStat({ label, counts }: { label: string; counts: { total: number; new: number; repeated: number } }) {
   return (
     <div className="rounded-lg border border-(--color-border) bg-(--color-surface-2) p-4">
       <div className="text-xs uppercase tracking-wide text-(--color-text-faint)">{label}</div>
@@ -171,13 +272,7 @@ function SubmissionStat({
       <div className="mt-1 flex flex-wrap gap-x-1.5 text-xs text-(--color-text-dim)">
         <span className="text-(--color-accent)">{counts.new} new</span>
         <span className="text-(--color-text-faint)">·</span>
-        <span>{counts.revised} revised</span>
-        {counts.backlog > 0 && (
-          <>
-            <span className="text-(--color-text-faint)">·</span>
-            <span className="text-(--color-text-faint)">{counts.backlog} backlog</span>
-          </>
-        )}
+        <span>{counts.repeated} repeated</span>
       </div>
     </div>
   )
@@ -188,12 +283,13 @@ function TimelyTracker() {
 
   return (
     <Card>
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-medium">
-          <Clock size={16} className="text-(--color-accent)" />
-          Timely tracker
-        </h2>
-      </div>
+      <h2 className="flex items-center gap-2 font-medium">
+        <Clock size={16} className="text-(--color-accent)" />
+        Timely tracker
+      </h2>
+      <p className="mt-1 text-xs text-(--color-text-faint)">
+        Questions solved, split by whether you'd done them before. "Today" follows LeetCode's own day boundary.
+      </p>
 
       {tracker.isLoading && (
         <div className="mt-4 flex items-center gap-2 text-sm text-(--color-text-dim)">
@@ -202,33 +298,10 @@ function TimelyTracker() {
       )}
 
       {tracker.data && (
-        <>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <SubmissionStat label="Today" counts={tracker.data.today} />
-            <SubmissionStat label="This month" counts={tracker.data.thisMonth} />
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-2 text-xs uppercase tracking-wide text-(--color-text-faint)">
-              Upcoming Milestone Exams <span className="normal-case text-(--color-text-faint)">— not due yet, just scheduled</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {CHECKPOINT_ORDER.map((bucket) => {
-                const count = tracker.data.byCheckpoint[bucket] ?? 0
-                const date = upcomingCheckpointDate(CHECKPOINT_DAY[bucket])
-                return (
-                  <div
-                    key={bucket}
-                    className="rounded-full border border-(--color-border) px-3 py-1 text-xs text-(--color-text-dim)"
-                  >
-                    <span className="font-mono text-(--color-text)">{count}</span> due{' '}
-                    {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <SubmissionStat label="Today" counts={tracker.data.today} />
+          <SubmissionStat label="This month" counts={tracker.data.thisMonth} />
+        </div>
       )}
     </Card>
   )
@@ -287,9 +360,7 @@ function LeetCodeProfileCard({ sync }: { sync: ReturnType<typeof useAutoSync> })
               <Pencil size={12} /> {username}
             </button>
             <div className="flex items-center gap-2 text-xs text-(--color-text-faint)">
-              <span>
-                {sync.isPending ? 'syncing…' : `synced ${timeAgo(sync.data?.lastSyncedAt ?? null)}`}
-              </span>
+              <span>{sync.isPending ? 'syncing…' : `synced ${timeAgo(sync.data?.lastSyncedAt ?? null)}`}</span>
               <button
                 onClick={() => sync.mutate(true)}
                 disabled={sync.isPending}
@@ -372,7 +443,6 @@ function LeetCodeProfileCard({ sync }: { sync: ReturnType<typeof useAutoSync> })
 export default function Dashboard() {
   const queryClient = useQueryClient()
   const sync = useAutoSync()
-  const overview = useQuery({ queryKey: ['stats', 'overview'], queryFn: () => api.get<Overview>('/stats/overview') })
   const due = useQuery({ queryKey: ['review', 'due'], queryFn: () => api.get<DueResponse>('/review/due') })
   const insights = useQuery({
     queryKey: ['insights', 'latest'],
@@ -397,18 +467,9 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-(--color-text-dim)">Pure focus. Review what's due, then move on.</p>
       </div>
 
-      <MilestoneExamCard />
+      <ReviseLatestCard />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile icon={CheckCircle2} label="Unique questions tracked" value={overview.data?.totalQuestions ?? '—'} />
-        <StatTile icon={ListChecks} label="Submissions tracked" value={overview.data?.totalAttempts ?? '—'} />
-        <StatTile
-          icon={CalendarClock}
-          label="Due today"
-          value={due.data?.dueTotal ?? '—'}
-          sub={due.data?.overdueCount ? `${due.data.overdueCount} overdue` : undefined}
-        />
-      </div>
+      <MilestoneExamCard />
 
       <LeetCodeProfileCard sync={sync} />
 

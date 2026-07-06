@@ -42,15 +42,21 @@ export default function TestResults() {
   const weakest = topicChartData[0]
   const config = JSON.parse(results.data.session.config || '{}')
   const isMilestone = config.source === 'milestone'
+  const isReviseLatest = config.source === 'revise-latest'
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight">
           Results
           {isMilestone && (
             <span className="flex items-center gap-1 rounded-full border border-(--color-gold)/30 px-2.5 py-0.5 text-xs font-medium text-(--color-gold)">
-              <Award size={12} /> Milestone Exam
+              <Award size={12} /> Milestone Exam{config.iteration > 1 ? ` — attempt ${config.iteration}` : ''}
+            </span>
+          )}
+          {isReviseLatest && (
+            <span className="rounded-full border border-(--color-accent)/30 px-2.5 py-0.5 text-xs font-medium text-(--color-accent)">
+              Revise latest topics
             </span>
           )}
         </h1>

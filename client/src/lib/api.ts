@@ -93,12 +93,11 @@ export type Overview = {
 
 export type MilestoneBucket = '5' | '10' | '15' | '20' | 'monthly-test'
 
-export type SubmissionCounts = { total: number; new: number; revised: number; backlog: number }
+export type SubmissionCounts = { total: number; new: number; repeated: number }
 
 export type ActivityTracker = {
   today: SubmissionCounts
   thisMonth: SubmissionCounts
-  byCheckpoint: Record<MilestoneBucket, number>
 }
 
 export type SyncResult = {
@@ -129,7 +128,10 @@ export type MilestoneNext = {
   topics: string[]
   poolSize: number
   usedFallback: boolean
+  attemptsSoFar: number
 }
+
+export type RevisePreview = { topics: string[]; poolSize: number; windowStart: string }
 
 export type InsightsReport = {
   id: number

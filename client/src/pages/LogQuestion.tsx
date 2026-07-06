@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
-import { api, type Attempt, type Question } from '../lib/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { api, type Attempt, type Overview, type Question } from '../lib/api'
 import { todayIso } from '../lib/date'
 import { Button, Card, DifficultyBadge, Input, Spinner, Textarea, TopicTag } from '../components/ui'
 
@@ -12,6 +12,8 @@ export default function LogQuestion() {
   const [confidence, setConfidence] = useState(3)
   const [code, setCode] = useState('')
   const [notes, setNotes] = useState('')
+
+  const overview = useQuery({ queryKey: ['stats', 'overview'], queryFn: () => api.get<Overview>('/stats/overview') })
 
   const submit = useMutation({
     mutationFn: () =>
@@ -34,16 +36,24 @@ export default function LogQuestion() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Add a past question</h1>
-        <p className="mt-1 text-sm text-(--color-text-dim)">
-          For backlog — questions you've already solved on LeetCode that aren't tracked here yet. Pick the date you
-          actually solved it. Title, difficulty, topics, and optimal complexity are fetched automatically.
-        </p>
-        <p className="mt-1 text-xs text-(--color-text-faint)">
-          Freshly solved something? No need to add it here — connect your LeetCode username on the Dashboard and it
-          syncs in automatically.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Add a past question</h1>
+          <p className="mt-1 text-sm text-(--color-text-dim)">
+            For backlog — questions you've already solved on LeetCode that aren't tracked here yet. Pick the date you
+            actually solved it. Title, difficulty, topics, and optimal complexity are fetched automatically.
+          </p>
+          <p className="mt-1 text-xs text-(--color-text-faint)">
+            Freshly solved something? No need to add it here — connect your LeetCode username on the Dashboard and it
+            syncs in automatically.
+          </p>
+        </div>
+        {overview.data && (
+          <div className="shrink-0 whitespace-nowrap text-right text-xs text-(--color-text-faint)">
+            <div>{overview.data.totalQuestions} questions tracked</div>
+            <div>{overview.data.totalAttempts} submissions logged</div>
+          </div>
+        )}
       </div>
 
       <Card>

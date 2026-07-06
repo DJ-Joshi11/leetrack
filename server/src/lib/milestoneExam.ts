@@ -13,6 +13,19 @@ const CHECKPOINT_DAY: Record<Bucket, number> = {
 
 const EXAM_SIZE: Record<Bucket, number> = { "5": 8, "10": 8, "15": 8, "20": 8, "monthly-test": 16 };
 
+// Difficulty skews harder as the month progresses toward the big monthly test — the 5th checkpoint
+// is the gentlest refresher, the monthly-test is the real stress-test.
+const DIFFICULTY_TARGETS: Record<Bucket, { Easy: number; Medium: number; Hard: number }> = {
+  "5": { Easy: 0.4, Medium: 0.5, Hard: 0.1 },
+  "10": { Easy: 0.3, Medium: 0.55, Hard: 0.15 },
+  "15": { Easy: 0.2, Medium: 0.55, Hard: 0.25 },
+  "20": { Easy: 0.15, Medium: 0.55, Hard: 0.3 },
+  "monthly-test": { Easy: 0.1, Medium: 0.5, Hard: 0.4 },
+};
+
+const MIN_EXAM_SIZE = 4;
+const MAX_EXAM_SIZE = 30;
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -100,13 +113,19 @@ export async function milestoneTopics(bucket: Bucket, now: Date = new Date()) {
   return { resolvedDate, start, end, topics: [...topics], poolMap, usedFallback };
 }
 
-/** Picks `count` questions from `pool`, favoring Medium (~60%) with a smaller share of Easy/Hard, filling from whatever's available. */
-function selectWithDifficultySkew(pool: any[], count: number): any[] {
+/** Picks `count` questions from `pool`, weighted by difficulty per the bucket's target mix (which
+ *  gets harder as the month progresses — see DIFFICULTY_TARGETS), filling from whatever's available. */
+function selectWithDifficultySkew(pool: any[], count: number, bucket: Bucket): any[] {
   const byDifficulty: Record<string, any[]> = { Easy: [], Medium: [], Hard: [] };
   for (const q of pool) (byDifficulty[q.difficulty] ??= []).push(q);
   for (const d of Object.keys(byDifficulty)) byDifficulty[d] = shuffle(byDifficulty[d]);
 
-  const targets = { Medium: Math.round(count * 0.6), Easy: Math.round(count * 0.25), Hard: Math.round(count * 0.15) };
+  const weights = DIFFICULTY_TARGETS[bucket];
+  const targets = {
+    Medium: Math.round(count * weights.Medium),
+    Easy: Math.round(count * weights.Easy),
+    Hard: Math.round(count * weights.Hard),
+  };
   const selected: any[] = [];
   const usedIds = new Set<number>();
 
@@ -130,13 +149,32 @@ function selectWithDifficultySkew(pool: any[], count: number): any[] {
   return shuffle(selected.slice(0, count));
 }
 
-export async function generateMilestoneExam(bucket: Bucket) {
+/** How many milestone exam sessions already exist for this bucket's checkpoint date — lets the
+ *  UI offer "retake" / label each attempt as its own iteration instead of pretending the
+ *  checkpoint was never attempted. */
+export async function countMilestoneAttempts(bucket: Bucket, milestoneDate: string): Promise<number> {
+  const rows = await sql`SELECT config FROM test_sessions`;
+  let count = 0;
+  for (const r of rows) {
+    try {
+      const cfg = JSON.parse(r.config);
+      if (cfg.source === "milestone" && cfg.bucket === bucket && cfg.milestoneDate === milestoneDate) count++;
+    } catch {
+      continue;
+    }
+  }
+  return count;
+}
+
+export async function generateMilestoneExam(bucket: Bucket, requestedSize?: number) {
   const { resolvedDate, topics, poolMap } = await milestoneTopics(bucket);
   if (poolMap.size === 0) {
     throw new Error("Log some questions before generating a milestone exam");
   }
 
-  const targetSize = EXAM_SIZE[bucket];
+  const targetSize = Math.max(MIN_EXAM_SIZE, Math.min(MAX_EXAM_SIZE, requestedSize ?? EXAM_SIZE[bucket]));
+  const milestoneDate = toLocalDateString(resolvedDate);
+  const previousAttempts = await countMilestoneAttempts(bucket, milestoneDate);
   const trackedNumbers = new Set((await sql`SELECT number FROM questions`).map((r: any) => r.number as number));
   const wantSupplemental = Math.max(4, Math.ceil(targetSize / 2));
 
@@ -182,14 +220,15 @@ export async function generateMilestoneExam(bucket: Bucket) {
   }
 
   const combined = [...poolMap.values()];
-  const selected = selectWithDifficultySkew(combined, Math.min(targetSize, combined.length));
+  const selected = selectWithDifficultySkew(combined, Math.min(targetSize, combined.length), bucket);
   if (!selected.length) throw new Error("Couldn't put together a milestone exam from your current data");
 
   const config = {
     count: selected.length,
     source: "milestone",
     bucket,
-    milestoneDate: toLocalDateString(resolvedDate),
+    milestoneDate,
+    iteration: previousAttempts + 1,
     topics,
   };
   const [session] = await sql`INSERT INTO test_sessions (config) VALUES (${JSON.stringify(config)}) RETURNING *`;

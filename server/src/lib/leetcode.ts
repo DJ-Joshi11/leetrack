@@ -147,17 +147,14 @@ export type LeetCodeProfile = {
   recentSubmissions: Array<{ number: number | null; title: string; slug: string; date: string }>;
 };
 
-// LeetCode timestamps are UTC instants. This app is scoped to a single IST user, so submission
-// dates are resolved to the IST calendar day explicitly — otherwise anything solved between
-// midnight and 5:30am IST would land on the wrong (previous) day once deployed on a UTC server.
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-function toIstDateString(date: Date): string {
-  return new Date(date.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
-}
-
+// LeetCode's own streak/calendar/daily-reset always runs on a fixed 00:00 UTC boundary —
+// confirmed on LeetCode's own discuss/feedback threads — regardless of the user's timezone
+// (for IST that's a 5:30am reset, not midnight). To keep our tracking consistent with what
+// LeetCode itself reports, submission dates are bucketed by plain UTC day, not local calendar
+// day. Do NOT "fix" this to IST local time — that was tried and made our dates disagree with
+// LeetCode's.
 function unixDayToIso(unixSeconds: number): string {
-  return toIstDateString(new Date(unixSeconds * 1000));
+  return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
 }
 
 export async function fetchUserProfile(username: string): Promise<LeetCodeProfile> {
@@ -212,9 +209,8 @@ export async function fetchUserProfile(username: string): Promise<LeetCodeProfil
 
   const trailingDays = 365;
   const calendar: Array<{ date: string; count: number }> = [];
-  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
   for (let i = trailingDays - 1; i >= 0; i--) {
-    const d = new Date(istNow);
+    const d = new Date(now);
     d.setUTCDate(d.getUTCDate() - i);
     const iso = d.toISOString().slice(0, 10);
     calendar.push({ date: iso, count: calendarMap.get(iso) ?? 0 });

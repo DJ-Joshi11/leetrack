@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ExternalLink, ListChecks, Timer as TimerIcon, MousePointerClick, Lightbulb } from 'lucide-react'
@@ -30,26 +30,51 @@ export default function TestRunner() {
   const [totalElapsed, setTotalElapsed] = useState(0)
   const [hintsShown, setHintsShown] = useState(0)
 
+  // Timers are derived from wall-clock timestamps, not tick counts — a backgrounded tab (e.g.
+  // while you're solving on leetcode.com) throttles setInterval, which would otherwise silently
+  // undercount the time actually spent. Recomputing from Date.now() on every tick and on tab
+  // refocus keeps the displayed time (and what gets submitted) accurate regardless.
+  const questionStartRef = useRef(Date.now())
+  const totalStartRef = useRef(Date.now())
+
   useEffect(() => {
     if (!started) return
-    const t = setInterval(() => {
-      setQuestionElapsed((s) => s + 1)
-      setTotalElapsed((s) => s + 1)
-    }, 1000)
-    return () => clearInterval(t)
+    const tick = () => {
+      setQuestionElapsed(Math.round((Date.now() - questionStartRef.current) / 1000))
+      setTotalElapsed(Math.round((Date.now() - totalStartRef.current) / 1000))
+    }
+    tick()
+    const t = setInterval(tick, 1000)
+    document.addEventListener('visibilitychange', tick)
+    window.addEventListener('focus', tick)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', tick)
+      window.removeEventListener('focus', tick)
+    }
   }, [started])
 
   useEffect(() => {
+    questionStartRef.current = Date.now()
     setQuestionElapsed(0)
     setHintsShown(0)
   }, [index])
+
+  useEffect(() => {
+    if (started) {
+      totalStartRef.current = Date.now()
+      questionStartRef.current = Date.now()
+    }
+  }, [started])
 
   const config = useMemo(() => (session.data ? JSON.parse(session.data.session.config) : {}), [session.data])
   const perQuestionSec: number | null = config.perQuestionSec ?? null
 
   const mark = useMutation({
-    mutationFn: (result: string) =>
-      api.patch(`/tests/${id}/questions/${current!.question_id}`, { result, time_spent_sec: questionElapsed }),
+    mutationFn: (result: string) => {
+      const timeSpentSec = Math.round((Date.now() - questionStartRef.current) / 1000)
+      return api.patch(`/tests/${id}/questions/${current!.question_id}`, { result, time_spent_sec: timeSpentSec })
+    },
   })
 
   const finish = useMutation({
